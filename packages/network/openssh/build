@@ -22,6 +22,9 @@
 
 . config/options $1
 
+# openssh fails to build with LTO and gcc-4.8.0
+  strip_lto
+
 export LD="$TARGET_CC"
 export LDFLAGS="$TARGET_CFLAGS $TARGET_LDFLAGS"
 
