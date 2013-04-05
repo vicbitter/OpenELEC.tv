@@ -1,0 +1,65 @@
+From 6f572466d5ed62c984dfc11597ed122006d681a1 Mon Sep 17 00:00:00 2001
+Date: Sat, 16 Mar 2013 09:04:05 +0000
+Subject: [PATCH] xbmc
+
+---
+ libavcodec/dxva2_h264.c |    8 ++++++++
+ libavcodec/h264.c       |    2 ++
+ libavcodec/h264.h       |    2 ++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/libavcodec/dxva2_h264.c b/libavcodec/dxva2_h264.c
+index f57ee54..6ae5cd9 100644
+--- a/libavcodec/dxva2_h264.c
++++ b/libavcodec/dxva2_h264.c
+@@ -431,6 +431,14 @@ static int dxva2_h264_end_frame(AVCodecContext *avctx)
+ 
+     if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
+         return -1;
++
++    // Wait for an I-frame before start decoding. Workaround for ATI UVD and UVD+ GPUs
++    if (!h->got_first_iframe) {
++        if (!(ctx_pic->pp.wBitFields & (1 << 15)))
++            return -1;
++        h->got_first_iframe = 1;
++    }
++
+     ret = ff_dxva2_common_end_frame(avctx, h->cur_pic_ptr,
+                                     &ctx_pic->pp, sizeof(ctx_pic->pp),
+                                     &ctx_pic->qm, sizeof(ctx_pic->qm),
+diff --git a/libavcodec/h264.c b/libavcodec/h264.c
+index 3a83b4b..937ad7a 100644
+--- a/libavcodec/h264.c
++++ b/libavcodec/h264.c
+@@ -2597,6 +2597,7 @@ static void flush_dpb(AVCodecContext *avctx)
+             h->delayed_pic[i]->f.reference = 0;
+         h->delayed_pic[i] = NULL;
+     }
++    h->got_first_iframe = 0;
+ 
+     flush_change(h);
+ 
+@@ -3022,6 +3023,7 @@ static int h264_slice_header_init(H264Context *h, int reinit)
+         free_tables(h, 0);
+     h->first_field = 0;
+     h->prev_interlaced_frame = 1;
++    h->got_first_iframe = 0;
+ 
+     init_scan_tables(h);
+     if (ff_h264_alloc_tables(h) < 0) {
+diff --git a/libavcodec/h264.h b/libavcodec/h264.h
+index 03be472..7ea613c 100644
+--- a/libavcodec/h264.h
++++ b/libavcodec/h264.h
+@@ -629,6 +629,8 @@ typedef struct H264Context {
+     int luma_weight_flag[2];    ///< 7.4.3.2 luma_weight_lX_flag
+     int chroma_weight_flag[2];  ///< 7.4.3.2 chroma_weight_lX_flag
+ 
++    int got_first_iframe;
++
+     // Timestamp stuff
+     int sei_buffering_period_present;   ///< Buffering period SEI flag
+     int initial_cpb_removal_delay[32];  ///< Initial timestamps for CPBs
+-- 
+1.7.10.4
+

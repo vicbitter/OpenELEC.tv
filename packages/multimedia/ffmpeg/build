@@ -147,14 +147,9 @@ cd $PKG_BUILD/
             --enable-network \
             --disable-gray \
             --enable-swscale-alpha \
-            --enable-fastdiv \
             $FFMPEG_OPTIM \
-            --enable-aandct \
             --enable-dct \
             --enable-fft \
-            --enable-golomb \
-            --enable-huffman \
-            --enable-lpc \
             --enable-mdct \
             --enable-rdft \
             $FFMPEG_CRYSTALHD \
@@ -187,7 +182,6 @@ cd $PKG_BUILD/
             --disable-libopencore-amrwb \
             --disable-libopencv \
             --disable-libdc1394 \
-            --disable-libdirac \
             --disable-libfaac \
             --disable-libfreetype \
             --disable-libgsm \
@@ -205,14 +199,11 @@ cd $PKG_BUILD/
             --disable-libx264 \
             --disable-libxavs \
             --disable-libxvid \
-            --disable-mlib \
             --enable-zlib \
             --enable-asm \
             --disable-altivec \
             $FFMPEG_CPU \
             $FFMPEG_FPU \
-            --disable-iwmmxt \
-            --disable-mmi \
             --disable-vis \
             --enable-yasm \
             --disable-sram \

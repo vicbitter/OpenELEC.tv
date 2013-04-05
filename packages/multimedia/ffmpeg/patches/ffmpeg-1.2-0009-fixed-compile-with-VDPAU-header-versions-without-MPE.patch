@@ -1,0 +1,58 @@
+From b5b942d1f2c512b03bf4e5ef7855862f1dc418c1 Mon Sep 17 00:00:00 2001
+Date: Sat, 16 Mar 2013 08:49:29 +0000
+Subject: [PATCH 1/2] xbmc
+
+---
+ configure          |    2 ++
+ libavcodec/vdpau.c |    2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/configure b/configure
+index dff53d8..4a8d003 100755
+--- a/configure
++++ b/configure
+@@ -3828,6 +3828,8 @@ check_header termios.h
+ check_header unistd.h
+ check_header vdpau/vdpau.h
+ check_header vdpau/vdpau_x11.h
++check_cpp_condition vdpau/vdpau.h "defined(VDP_DECODER_PROFILE_MPEG4_PART2_SP)" && enable vdpau_mpeg4_support
++
+ check_header VideoDecodeAcceleration/VDADecoder.h
+ check_header windows.h
+ check_header X11/extensions/XvMClib.h
+diff --git a/libavcodec/vdpau.c b/libavcodec/vdpau.c
+index 6df7f4a..29f9934 100644
+--- a/libavcodec/vdpau.c
++++ b/libavcodec/vdpau.c
+@@ -357,6 +357,7 @@ void ff_vdpau_vc1_decode_picture(MpegEncContext *s, const uint8_t *buf,
+     render->bitstream_buffers_used        = 0;
+ }
+ 
++#ifdef VDP_DECODER_PROFILE_MPEG4_PART2_SP
+ void ff_vdpau_mpeg4_decode_picture(MpegEncContext *s, const uint8_t *buf,
+                                    int buf_size)
+ {
+@@ -410,5 +411,6 @@ void ff_vdpau_mpeg4_decode_picture(MpegEncContext *s, const uint8_t *buf,
+     ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
+     render->bitstream_buffers_used = 0;
+ }
++#endif
+ 
+ /* @}*/
+diff --git a/libavcodec/vdpau.h b/libavcodec/vdpau.h
+index df2aace..29a2cb1 100644
+--- a/libavcodec/vdpau.h
++++ b/libavcodec/vdpau.h
+@@ -56,7 +56,9 @@ union FFVdpPictureInfo {
+     VdpPictureInfoH264        h264;
+     VdpPictureInfoMPEG1Or2    mpeg;
+     VdpPictureInfoVC1          vc1;
++#ifdef VDP_DECODER_PROFILE_MPEG4_PART2_SP
+     VdpPictureInfoMPEG4Part2 mpeg4;
++#endif
+ };
+ 
+ /**
+-- 
+1.7.10.4
+
