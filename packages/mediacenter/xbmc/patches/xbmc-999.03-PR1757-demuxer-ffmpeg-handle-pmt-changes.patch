@@ -1,0 +1,236 @@
+From af9f488189e953edf515c6e81ac1629ba2ceb06b Mon Sep 17 00:00:00 2001
+From: xbmc <fernetmenta@online.de>
+Date: Tue, 13 Nov 2012 14:04:49 +0100
+Subject: [PATCH] demuxer ffmpeg: handle pmt changes
+
+---
+ .../cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp | 117 ++++++++++++++++++---
+ xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.h  |  12 +++
+ 2 files changed, 112 insertions(+), 17 deletions(-)
+
+diff --git a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+index 7d4e35b..c64ef12 100644
+--- a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
++++ b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+@@ -214,6 +214,7 @@ static offset_t dvd_file_seek(void *h, offset_t pos, int whence)
+   m_bAVI = false;
+   m_speed = DVD_PLAYSPEED_NORMAL;
+   m_program = UINT_MAX;
++  m_AVPacket.result = -1;
+ }
+ 
+ CDVDDemuxFFmpeg::~CDVDDemuxFFmpeg()
+@@ -483,19 +484,10 @@ bool CDVDDemuxFFmpeg::Open(CDVDInputStream* pInput)
+       if(i != m_program)
+         m_pFormatContext->programs[i]->discard = AVDISCARD_ALL;
+     }
+-    if(m_program != UINT_MAX)
+-    {
+-      // add streams from selected program
+-      for (unsigned int i = 0; i < m_pFormatContext->programs[m_program]->nb_stream_indexes; i++)
+-        AddStream(m_pFormatContext->programs[m_program]->stream_index[i]);
+-    }
+-  }
+-  // if there were no programs or they were all empty, add all streams
+-  if (m_program == UINT_MAX)
+-  {
+-    for (unsigned int i = 0; i < m_pFormatContext->nb_streams; i++)
+-      AddStream(i);
+   }
++  // add all streams, don't allow gaps in m_streams
++  for (unsigned int i = 0; i < m_pFormatContext->nb_streams; i++)
++    AddStream(i);
+ 
+   return true;
+ }
+@@ -504,6 +496,12 @@ void CDVDDemuxFFmpeg::Dispose()
+ {
+   g_demuxer.set(this);
+ 
++  if(m_AVPacket.result >= 0)
++  {
++    m_dllAvCodec.av_free_packet(&m_AVPacket.packet);
++    m_AVPacket.result = -1;
++  }
++
+   if (m_pFormatContext)
+   {
+     if (m_ioContext && m_pFormatContext->pb && m_pFormatContext->pb != m_ioContext)
+@@ -647,10 +645,33 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+     pkt.data = NULL;
+     pkt.stream_index = MAX_STREAMS;
+ 
+-    // timeout reads after 100ms
+-    m_timeout.Set(20000);
+-    int result = m_dllAvFormat.av_read_frame(m_pFormatContext, &pkt);
+-    m_timeout.SetInfinite();
++    int result = -1;
++    // check for saved packet after a program change
++    if(m_AVPacket.result >= 0)
++    {
++      // in case we did not move by seek or demuxer was flushed,
++      // take the packet of last read
++      if(m_AVPacket.pts == m_iCurrentPts)
++      {
++        pkt = m_AVPacket.packet;
++        result = m_AVPacket.result;
++        m_AVPacket.result = -1;
++      }
++      else
++      {
++        m_dllAvCodec.av_free_packet(&m_AVPacket.packet);
++        m_AVPacket.result = -1;
++        result = -1;
++      }
++    }
++
++    if (result == -1)
++    {
++      // timeout reads after 100ms
++      m_timeout.Set(20000);
++      result = m_dllAvFormat.av_read_frame(m_pFormatContext, &pkt);
++      m_timeout.SetInfinite();
++    }
+ 
+     if (result == AVERROR(EINTR) || result == AVERROR(EAGAIN))
+     {
+@@ -661,6 +682,22 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+     {
+       Flush();
+     }
++    else if (IsProgramChange())
++    {
++      // update streams
++      for (unsigned int i = 0; i < m_pFormatContext->nb_streams; i++)
++        AddStream(i);
++
++      // save packet for next read
++      m_AVPacket.packet = pkt;
++      m_AVPacket.result = result;
++      m_AVPacket.pts = m_iCurrentPts;
++
++      pPacket = CDVDDemuxUtils::AllocateDemuxPacket(0);
++      pPacket->iStreamId = DMX_SPECIALID_STREAMCHANGE;
++
++      return pPacket;
++    }
+     else if (pkt.size < 0 || pkt.stream_index >= MAX_STREAMS)
+     {
+       // XXX, in some cases ffmpeg returns a negative packet size
+@@ -779,12 +816,17 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+   // check streams, can we make this a bit more simple?
+   if (pPacket && pPacket->iStreamId >= 0 && pPacket->iStreamId < MAX_STREAMS)
+   {
+-    if (!m_streams[pPacket->iStreamId] ||
++    if (!IsActiveStream(pPacket->iStreamId))
++    {
++      CLog::Log(LOGDEBUG,"CDVDDemuxFFmpeg::Read - got packet of inactive stream");
++    }
++    else if (!m_streams[pPacket->iStreamId] ||
+         m_streams[pPacket->iStreamId]->pPrivate != m_pFormatContext->streams[pPacket->iStreamId] ||
+         m_streams[pPacket->iStreamId]->codec != m_pFormatContext->streams[pPacket->iStreamId]->codec->codec_id)
+     {
+       // content has changed, or stream did not yet exist
+       AddStream(pPacket->iStreamId);
++      m_streams[pPacket->iStreamId]->changes++;
+     }
+     // we already check for a valid m_streams[pPacket->iStreamId] above
+     else if (m_streams[pPacket->iStreamId]->type == STREAM_AUDIO)
+@@ -794,6 +836,7 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+       {
+         // content has changed
+         AddStream(pPacket->iStreamId);
++        m_streams[pPacket->iStreamId]->changes++;
+       }
+     }
+     else if (m_streams[pPacket->iStreamId]->type == STREAM_VIDEO)
+@@ -803,6 +846,7 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+       {
+         // content has changed
+         AddStream(pPacket->iStreamId);
++        m_streams[pPacket->iStreamId]->changes++;
+       }
+     }
+   }
+@@ -1170,6 +1214,11 @@ void CDVDDemuxFFmpeg::AddStream(int iId)
+     else
+       m_streams[iId]->iPhysicalId = pStream->id;
+   }
++  if (!IsActiveStream(iId))
++  {
++    m_streams[iId]->type = STREAM_NONE;
++    m_streams[iId]->codec = CODEC_ID_NONE;
++  }
+ }
+ 
+ std::string CDVDDemuxFFmpeg::GetFileName()
+@@ -1327,3 +1376,37 @@ void CDVDDemuxFFmpeg::GetStreamCodecName(int iStreamId, CStdString &strName)
+       strName = codec->name;
+   }
+ }
++
++bool CDVDDemuxFFmpeg::IsActiveStream(int idx)
++{
++  if (m_program == UINT_MAX)
++    return true;
++
++  for (unsigned int i = 0; i < m_pFormatContext->programs[m_program]->nb_stream_indexes; i++)
++  {
++    if (idx ==  m_pFormatContext->programs[m_program]->stream_index[i] &&
++        m_pFormatContext->streams[idx]->codec->codec_type != AVMEDIA_TYPE_UNKNOWN)
++      return true;
++  }
++
++  return false;
++}
++
++bool CDVDDemuxFFmpeg::IsProgramChange()
++{
++  if (m_program == UINT_MAX)
++    return false;
++
++  bool change(false);
++  int noOfStreams = GetNrOfStreams();
++  for (int i = 0; i < noOfStreams; i++)
++  {
++    if ((m_streams[i]->type == STREAM_NONE && IsActiveStream(i)) ||
++        (m_streams[i]->type != STREAM_NONE && !IsActiveStream(i)))
++      change = true;
++  }
++  if (noOfStreams != m_pFormatContext->nb_streams)
++    change = true;
++
++  return change;
++}
+diff --git a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.h b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.h
+index 1df2493..9bb7f75 100644
+--- a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.h
++++ b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.h
+@@ -122,6 +122,8 @@ class CDVDDemuxFFmpeg : public CDVDDemux
+ 
+   double ConvertTimestamp(int64_t pts, int den, int num);
+   void UpdateCurrentPTS();
++  bool IsActiveStream(int idx);
++  bool IsProgramChange();
+ 
+   CCriticalSection m_critSection;
+   #define MAX_STREAMS 100
+@@ -141,5 +143,15 @@ class CDVDDemuxFFmpeg : public CDVDDemux
+   XbmcThreads::EndTime  m_timeout;
+ 
+   CDVDInputStream* m_pInput;
++
++  // Due to limitations of ffmpeg, we only can detect a program change
++  // with a packet. This struct saves the packet for the next read and
++  // signals STREAMCHANGE to player
++  struct
++  {
++    AVPacket packet;    // packet ffmpeg returned
++    int      result;    // result from av_read_packet
++    double   pts;       // our current pts at the time we got the packet
++  }m_AVPacket;
+
+  bool m_bPtsWrap, m_bPtsWrapChecked;
+-- 
+1.8.1.5
+

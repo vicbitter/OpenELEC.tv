@@ -1,7 +1,7 @@
-diff --git a/xbmc/settings/GUIWindowSettingsCategory.cpp b/xbmc/settings/GUIWindowSettingsCategory.cpp
+diff --git a/xbmc/settings/windows/GUIWindowSettingsCategory.cpp b/xbmc/settings/GUIWindowSettingsCategory.cpp
 index cbf0acb..f789e18 100644
---- a/xbmc/settings/GUIWindowSettingsCategory.cpp
-+++ b/xbmc/settings/GUIWindowSettingsCategory.cpp
+--- a/xbmc/settings/windows/GUIWindowSettingsCategory.cpp
++++ b/xbmc/settings/windows/GUIWindowSettingsCategory.cpp
 @@ -2434,7 +2434,7 @@ DisplayMode CGUIWindowSettingsCategory::FillInScreens(CStdString strSetting, RES
      pControl->Clear();
  
