@@ -30,6 +30,12 @@ echo "getting sources..."
   fi
 
   cd $DEST_DIR-latest
+
+echo "getting current version..."
+  GIT_OLD_REV=`git log -n1 --format=%h`
+  echo $GIT_OLD_REV
+
+echo "updating with latest from head..."
     git pull
 
 echo "getting version..."
@@ -76,3 +82,41 @@ echo "packing sources..."
 echo "remove temporary sourcedir..."
   rm -rf $PKG_NAME-$PKG_VERSION
   rm -rf $PKG_NAME-theme-Confluence-$PKG_VERSION
+
+echo "copying tar balls to sources..."
+  mkdir -p ../../sources/$PKG_NAME/
+
+  mkdir -p ../../sources/$PKG_NAME-theme-Confluence/
+
+  mv $PKG_NAME-$PKG_VERSION.tar.xz ../../sources/$PKG_NAME/
+  mv $PKG_NAME-theme-Confluence-$PKG_VERSION.tar.xz ../../sources/$PKG_NAME-theme-Confluence/
+
+echo "generate md5 and url files..."
+  cd ../..
+
+  md5sum sources/$PKG_NAME/$PKG_NAME-$PKG_VERSION.tar.xz > \
+         sources/$PKG_NAME/$PKG_NAME-$PKG_VERSION.tar.xz.md5
+  md5sum sources/$PKG_NAME-theme-Confluence/$PKG_NAME-theme-Confluence-$PKG_VERSION.tar.xz > \
+         sources/$PKG_NAME-theme-Confluence/$PKG_NAME-theme-Confluence-$PKG_VERSION.tar.xz.md5
+
+  echo " http://sources.openelec.tv/devel/$PKG_NAME-$PKG_VERSION.tar.xz" > \
+         sources/$PKG_NAME/$PKG_NAME-$PKG_VERSION.tar.xz.url
+  echo " http://sources.openelec.tv/devel/$PKG_NAME-theme-Confluence-$PKG_VERSION.tar.xz" > \
+         sources/$PKG_NAME-theme-Confluence/$PKG_NAME-theme-Confluence-$PKG_VERSION.tar.xz.url
+
+echo "Update meta files and rename patches..."
+
+  if [ $PKG_VERSION != $GIT_OLD_REV ] ; then
+    sed -i "s/PKG_VERSION=\"$GIT_OLD_REV\"/PKG_VERSION=\"$PKG_VERSION\"/" packages/mediacenter/$PKG_NAME/meta
+    sed -i "s/PKG_VERSION=\"$GIT_OLD_REV\"/PKG_VERSION=\"$PKG_VERSION\"/" packages/mediacenter/$PKG_NAME-theme-Confluence/meta
+
+#    cd packages/mediacenter/$PKG_NAME/patches
+#    ./rename.sh $GIT_OLD_REV $PKG_VERSION
+
+#    cd ../../$PKG_NAME-theme-Confluence/patches
+#    ./rename.sh $GIT_OLD_REV $PKG_VERSION
+
+  fi
+
+echo "Source tar balls generated for $PKG_NAME and $PKG_NAME-theme-Confluence NEW PKG_VERSION=$PKG_VERSION and OLD PKG_VERSION=$GIT_OLD_REV successfully."
+
