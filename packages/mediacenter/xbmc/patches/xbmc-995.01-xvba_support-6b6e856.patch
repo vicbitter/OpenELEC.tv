@@ -1,6 +1,6 @@
-From c9d72518ea9e28d7e9f904eef8347b4e926383f6 Mon Sep 17 00:00:00 2001
+From bf92580f9c8d427008a1aee41277db0b3b3e0239 Mon Sep 17 00:00:00 2001
 From: vicbitter <xbmcvb@gmail.com>
-Date: Fri, 5 Apr 2013 15:56:26 +0100
+Date: Sat, 6 Apr 2013 15:13:14 +0100
 Subject: [PATCH] XVBA support
 
 ---
@@ -63,7 +63,7 @@ Subject: [PATCH] XVBA support
  xbmc/rendering/gl/RenderSystemGL.h                 |    1 +
  xbmc/settings/AdvancedSettings.cpp                 |   14 +-
  xbmc/settings/AdvancedSettings.h                   |    6 +-
- xbmc/settings/GUISettings.cpp                      |   10 +-
+ xbmc/settings/GUISettings.cpp                      |   12 +-
  xbmc/settings/Settings.cpp                         |    1 +
  xbmc/settings/VideoSettings.h                      |    2 +
  .../settings/windows/GUIWindowSettingsCategory.cpp |   86 +-
@@ -85,7 +85,7 @@ Subject: [PATCH] XVBA support
  xbmc/windowing/X11/WinSystemX11GL.cpp              |   11 +-
  xbmc/windowing/X11/XRandR.cpp                      |   95 +-
  xbmc/windowing/X11/XRandR.h                        |   10 +-
- 81 files changed, 10649 insertions(+), 1766 deletions(-)
+ 81 files changed, 10650 insertions(+), 1767 deletions(-)
  create mode 100644 lib/ffmpeg/libavcodec/xvba.c
  create mode 100644 lib/ffmpeg/libavcodec/xvba.h
  create mode 100644 lib/ffmpeg/libavcodec/xvba_h264.c
@@ -194,7 +194,7 @@ index f0e4905..a260c98 100644
        --enable-pthreads \
        --enable-runtime-cpudetect \
 diff --git a/language/English/strings.po b/language/English/strings.po
-index 7017ead..a2886c9 100644
+index f356471..85e71e8 100644
 --- a/language/English/strings.po
 +++ b/language/English/strings.po
 @@ -937,7 +937,9 @@ msgctxt "#245"
@@ -208,7 +208,7 @@ index 7017ead..a2886c9 100644
  
  msgctxt "#247"
  msgid "Scripts"
-@@ -4573,12 +4575,7 @@ msgctxt "#13121"
+@@ -4625,12 +4627,7 @@ msgctxt "#13121"
  msgid "VDPAU HQ Upscaling level"
  msgstr ""
  
@@ -222,12 +222,10 @@ index 7017ead..a2886c9 100644
  
  #: xbmc/settings/GUISettings.cpp
  msgctxt "#13130"
-@@ -5348,7 +5345,19 @@ msgctxt "#13434"
- msgid "Play only this"
- msgstr ""
+@@ -5402,10 +5399,22 @@ msgstr ""
  
--#empty strings from id 13435 to 13499
-+msgctxt "#13435"
+ #: xbmc/settings/GUISettings.cpp
+ msgctxt "#13435"
 +msgid "Allow Vdpau OpenGL interop"
 +msgstr ""
 +
@@ -239,11 +237,16 @@ index 7017ead..a2886c9 100644
 +msgid "Allow hardware acceleration (XVBA)"
 +msgstr ""
 +
-+#empty strings from id 13438 to 13499
++msgctxt "#13438"
+ msgid "Enable HQ Scalers for scalings above %"
+ msgstr ""
+ 
+-#empty strings from id 13436 to 13499
++#empty strings from id 13439 to 13499
  
  #: xbmc/settings/GUISettings.cpp
  msgctxt "#13500"
-@@ -6372,10 +6381,14 @@ msgid "Software Blend"
+@@ -6429,10 +6438,14 @@ msgid "Software Blend"
  msgstr ""
  
  msgctxt "#16325"
@@ -1347,7 +1350,7 @@ index 3e1944d..675ca35 100644
    virtual bool Supports(ERENDERFEATURE feature) { return false; }
  
 diff --git a/xbmc/cores/VideoRenderers/LinuxRendererGL.cpp b/xbmc/cores/VideoRenderers/LinuxRendererGL.cpp
-index d6dbe05..9d1c490 100644
+index 5203e7e..8913387 100644
 --- a/xbmc/cores/VideoRenderers/LinuxRendererGL.cpp
 +++ b/xbmc/cores/VideoRenderers/LinuxRendererGL.cpp
 @@ -66,6 +66,9 @@
@@ -1424,10 +1427,10 @@ index d6dbe05..9d1c490 100644
    if (!m_bConfigured) return;
    ManageDisplay();
 -  ManageTextures();
+   m_scalingMethodGui = (ESCALINGMETHOD)-1;
  }
  
- void CLinuxRendererGL::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
-@@ -641,7 +657,6 @@ void CLinuxRendererGL::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+@@ -642,7 +658,6 @@ void CLinuxRendererGL::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
    }
  
    ManageDisplay();
@@ -1435,7 +1438,7 @@ index d6dbe05..9d1c490 100644
  
    g_graphicsContext.BeginPaint();
  
-@@ -779,11 +794,6 @@ void CLinuxRendererGL::FlipPage(int source)
+@@ -780,11 +795,6 @@ void CLinuxRendererGL::FlipPage(int source)
  
    m_buffers[m_iYV12RenderBuffer].flipindex = ++m_flipindex;
  
@@ -1447,7 +1450,7 @@ index d6dbe05..9d1c490 100644
    return;
  }
  
-@@ -798,7 +808,6 @@ unsigned int CLinuxRendererGL::PreInit()
+@@ -799,7 +809,6 @@ unsigned int CLinuxRendererGL::PreInit()
      m_resolution = RES_DESKTOP;
  
    m_iYV12RenderBuffer = 0;
@@ -1455,7 +1458,7 @@ index d6dbe05..9d1c490 100644
  
    m_formats.push_back(RENDER_FMT_YUV420P);
    GLint size;
-@@ -867,6 +876,14 @@ void CLinuxRendererGL::UpdateVideoFilter()
+@@ -868,6 +877,14 @@ void CLinuxRendererGL::UpdateVideoFilter()
      m_scalingMethod = VS_SCALINGMETHOD_LINEAR;
    }
  
@@ -1470,7 +1473,7 @@ index d6dbe05..9d1c490 100644
    if (m_pVideoFilterShader)
    {
      m_pVideoFilterShader->Free();
-@@ -895,7 +912,7 @@ void CLinuxRendererGL::UpdateVideoFilter()
+@@ -896,7 +913,7 @@ void CLinuxRendererGL::UpdateVideoFilter()
    case VS_SCALINGMETHOD_LINEAR:
      SetTextureFilter(m_scalingMethod == VS_SCALINGMETHOD_NEAREST ? GL_NEAREST : GL_LINEAR);
      m_renderQuality = RQ_SINGLEPASS;
@@ -1479,7 +1482,7 @@ index d6dbe05..9d1c490 100644
      {
        m_pVideoFilterShader = new StretchFilterShader();
        if (!m_pVideoFilterShader->CompileAndLink())
-@@ -981,6 +998,11 @@ void CLinuxRendererGL::LoadShaders(int field)
+@@ -982,6 +999,11 @@ void CLinuxRendererGL::LoadShaders(int field)
      CLog::Log(LOGNOTICE, "GL: Using CVBREF render method");
      m_renderMethod = RENDER_CVREF;
    }
@@ -1491,7 +1494,7 @@ index d6dbe05..9d1c490 100644
    else
    {
      int requestedMethod = g_guiSettings.GetInt("videoplayer.rendermethod");
-@@ -1111,6 +1133,12 @@ void CLinuxRendererGL::LoadShaders(int field)
+@@ -1112,6 +1134,12 @@ void CLinuxRendererGL::LoadShaders(int field)
      m_textureCreate = &CLinuxRendererGL::CreateVDPAUTexture;
      m_textureDelete = &CLinuxRendererGL::DeleteVDPAUTexture;
    }
@@ -1504,7 +1507,7 @@ index d6dbe05..9d1c490 100644
    else if (m_format == RENDER_FMT_VAAPI)
    {
      m_textureUpload = &CLinuxRendererGL::UploadVAAPITexture;
-@@ -1123,6 +1151,12 @@ void CLinuxRendererGL::LoadShaders(int field)
+@@ -1124,6 +1152,12 @@ void CLinuxRendererGL::LoadShaders(int field)
      m_textureCreate = &CLinuxRendererGL::CreateCVRefTexture;
      m_textureDelete = &CLinuxRendererGL::DeleteCVRefTexture;
    }
@@ -1517,7 +1520,7 @@ index d6dbe05..9d1c490 100644
    else
    {
      // setup default YV12 texture handlers
-@@ -1186,7 +1220,10 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
+@@ -1187,7 +1221,10 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
      m_currentField = FIELD_FULL;
  
    // call texture load function
@@ -1528,7 +1531,7 @@ index d6dbe05..9d1c490 100644
  
    if (m_renderMethod & RENDER_GLSL)
    {
-@@ -1195,12 +1232,21 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
+@@ -1196,12 +1233,21 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
      {
      case RQ_LOW:
      case RQ_SINGLEPASS:
@@ -1552,7 +1555,7 @@ index d6dbe05..9d1c490 100644
        VerifyGLState();
        break;
      }
-@@ -1223,6 +1269,13 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
+@@ -1224,6 +1270,13 @@ void CLinuxRendererGL::Render(DWORD flags, int renderBuffer)
      RenderVAAPI(renderBuffer, m_currentField);
    }
  #endif
@@ -1566,7 +1569,7 @@ index d6dbe05..9d1c490 100644
    else
    {
      // RENDER_CVREF uses the same render as the default case
-@@ -1323,13 +1376,7 @@ void CLinuxRendererGL::RenderSinglePass(int index, int field)
+@@ -1324,13 +1377,7 @@ void CLinuxRendererGL::RenderSinglePass(int index, int field)
    VerifyGLState();
  }
  
@@ -1581,7 +1584,7 @@ index d6dbe05..9d1c490 100644
  {
    YUVPLANES &planes = m_buffers[index].fields[field];
  
-@@ -1431,6 +1478,8 @@ void CLinuxRendererGL::RenderToFBO(int index, int field)
+@@ -1432,6 +1479,8 @@ void CLinuxRendererGL::RenderToFBO(int index, int field)
    }
    m_fbo.width  *= planes[0].pixpertex_x;
    m_fbo.height *= planes[0].pixpertex_y;
@@ -1590,7 +1593,7 @@ index d6dbe05..9d1c490 100644
  
    // 1st Pass to video frame size
    glBegin(GL_QUADS);
-@@ -1549,20 +1598,40 @@ void CLinuxRendererGL::RenderFromFBO()
+@@ -1550,20 +1599,40 @@ void CLinuxRendererGL::RenderFromFBO()
    VerifyGLState();
  }
  
@@ -1638,7 +1641,7 @@ index d6dbe05..9d1c490 100644
  
    // Try some clamping or wrapping
    glTexParameteri(m_textureTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-@@ -1620,8 +1689,6 @@ void CLinuxRendererGL::RenderVDPAU(int index, int field)
+@@ -1621,8 +1690,6 @@ void CLinuxRendererGL::RenderVDPAU(int index, int field)
    if (m_pVideoFilterShader)
      m_pVideoFilterShader->Disable();
  
@@ -1647,7 +1650,7 @@ index d6dbe05..9d1c490 100644
    glBindTexture (m_textureTarget, 0);
    glDisable(m_textureTarget);
  #endif
-@@ -1716,6 +1783,77 @@ void CLinuxRendererGL::RenderVAAPI(int index, int field)
+@@ -1717,6 +1784,77 @@ void CLinuxRendererGL::RenderVAAPI(int index, int field)
  #endif
  }
  
@@ -1725,7 +1728,7 @@ index d6dbe05..9d1c490 100644
  void CLinuxRendererGL::RenderSoftware(int index, int field)
  {
    // used for textues uploaded from rgba or CVPixelBuffers.
-@@ -2306,12 +2444,14 @@ void CLinuxRendererGL::DeleteVDPAUTexture(int index)
+@@ -2307,12 +2445,14 @@ void CLinuxRendererGL::DeleteVDPAUTexture(int index)
  {
  #ifdef HAVE_LIBVDPAU
    YUVPLANE &plane = m_buffers[index].fields[0][0];
@@ -1740,7 +1743,7 @@ index d6dbe05..9d1c490 100644
  #endif
  }
  
-@@ -2345,11 +2485,152 @@ bool CLinuxRendererGL::CreateVDPAUTexture(int index)
+@@ -2346,11 +2486,152 @@ bool CLinuxRendererGL::CreateVDPAUTexture(int index)
  void CLinuxRendererGL::UploadVDPAUTexture(int index)
  {
  #ifdef HAVE_LIBVDPAU
@@ -1894,7 +1897,7 @@ index d6dbe05..9d1c490 100644
  
  void CLinuxRendererGL::DeleteVAAPITexture(int index)
  {
-@@ -2481,7 +2762,7 @@ void CLinuxRendererGL::UploadVAAPITexture(int index)
+@@ -2482,7 +2763,7 @@ void CLinuxRendererGL::UploadVAAPITexture(int index)
    || status == VA_STATUS_ERROR_INVALID_DISPLAY)
    {
      va.display->lost(true);
@@ -1903,7 +1906,7 @@ index d6dbe05..9d1c490 100644
      {
        m_buffers[i].vaapi.display.reset();
        m_buffers[i].vaapi.surface.reset();
-@@ -2624,6 +2905,91 @@ bool CLinuxRendererGL::CreateCVRefTexture(int index)
+@@ -2625,6 +2906,91 @@ bool CLinuxRendererGL::CreateCVRefTexture(int index)
    return true;
  }
  
@@ -1995,7 +1998,7 @@ index d6dbe05..9d1c490 100644
  void CLinuxRendererGL::UploadYUV422PackedTexture(int source)
  {
    YUVBUFFER& buf    =  m_buffers[source];
-@@ -3203,12 +3569,15 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
+@@ -3204,12 +3570,15 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
  {
    if(feature == RENDERFEATURE_BRIGHTNESS)
    {
@@ -2012,7 +2015,7 @@ index d6dbe05..9d1c490 100644
      return (m_renderMethod & RENDER_GLSL)
          || (m_renderMethod & RENDER_ARB)
          || ((m_renderMethod & RENDER_SW) && glewIsSupported("GL_ARB_imaging") == GL_TRUE);
-@@ -3216,12 +3585,15 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
+@@ -3217,12 +3586,15 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
    
    if(feature == RENDERFEATURE_CONTRAST)
    {
@@ -2029,7 +2032,7 @@ index d6dbe05..9d1c490 100644
      return (m_renderMethod & RENDER_GLSL)
          || (m_renderMethod & RENDER_ARB)
          || ((m_renderMethod & RENDER_SW) && glewIsSupported("GL_ARB_imaging") == GL_TRUE);
-@@ -3245,7 +3617,8 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
+@@ -3246,7 +3618,8 @@ bool CLinuxRendererGL::Supports(ERENDERFEATURE feature)
    if (feature == RENDERFEATURE_NONLINSTRETCH)
    {
      if (((m_renderMethod & RENDER_GLSL) && !(m_renderMethod & RENDER_POT)) ||
@@ -2039,7 +2042,7 @@ index d6dbe05..9d1c490 100644
        return true;
    }
  
-@@ -3287,12 +3660,13 @@ bool CLinuxRendererGL::Supports(EINTERLACEMETHOD method)
+@@ -3288,12 +3661,13 @@ bool CLinuxRendererGL::Supports(EINTERLACEMETHOD method)
    if(method == VS_INTERLACEMETHOD_AUTO)
      return true;
  
@@ -2057,7 +2060,7 @@ index d6dbe05..9d1c490 100644
  #endif
      return false;
    }
-@@ -3316,6 +3690,16 @@ bool CLinuxRendererGL::Supports(EINTERLACEMETHOD method)
+@@ -3317,6 +3691,16 @@ bool CLinuxRendererGL::Supports(EINTERLACEMETHOD method)
      return false;
    }
  
@@ -2074,16 +2077,16 @@ index d6dbe05..9d1c490 100644
  #ifdef TARGET_DARWIN
    // YADIF too slow for HD but we have no methods to fall back
    // to something that works so just turn it off.
-@@ -3358,7 +3742,7 @@ bool CLinuxRendererGL::Supports(ESCALINGMETHOD method)
-   || method == VS_SCALINGMETHOD_LANCZOS3)
-   {
+@@ -3366,7 +3750,7 @@ bool CLinuxRendererGL::Supports(ESCALINGMETHOD method)
+       return false;
+ 
      if ((glewIsSupported("GL_EXT_framebuffer_object") && (m_renderMethod & RENDER_GLSL)) ||
 -        (m_renderMethod & RENDER_VDPAU) || (m_renderMethod & RENDER_VAAPI))
 +        (m_renderMethod & RENDER_VDPAU) || (m_renderMethod & RENDER_VAAPI) || (m_renderMethod & RENDER_XVBA))
      {
        // spline36 and lanczos3 are only allowed through advancedsettings.xml
        if(method != VS_SCALINGMETHOD_SPLINE36
-@@ -3378,14 +3762,7 @@ EINTERLACEMETHOD CLinuxRendererGL::AutoInterlaceMethod()
+@@ -3386,14 +3770,7 @@ EINTERLACEMETHOD CLinuxRendererGL::AutoInterlaceMethod()
      return VS_INTERLACEMETHOD_NONE;
  
    if(m_renderMethod & RENDER_VDPAU)
@@ -2098,7 +2101,7 @@ index d6dbe05..9d1c490 100644
  
    if(Supports(VS_INTERLACEMETHOD_RENDER_BOB))
      return VS_INTERLACEMETHOD_RENDER_BOB;
-@@ -3428,26 +3805,27 @@ void CLinuxRendererGL::UnBindPbo(YUVBUFFER& buff)
+@@ -3436,26 +3813,27 @@ void CLinuxRendererGL::UnBindPbo(YUVBUFFER& buff)
  }
  
  #ifdef HAVE_LIBVDPAU
@@ -2133,7 +2136,7 @@ index d6dbe05..9d1c490 100644
    if (buf.cvBufferRef)
      CVBufferRelease(buf.cvBufferRef);
    buf.cvBufferRef = cvBufferRef;
-@@ -3456,4 +3834,14 @@ void CLinuxRendererGL::AddProcessor(struct __CVBuffer *cvBufferRef)
+@@ -3464,4 +3842,14 @@ void CLinuxRendererGL::AddProcessor(struct __CVBuffer *cvBufferRef)
  }
  #endif
  
@@ -3253,7 +3256,7 @@ index 5b58f61..95f4a1e 100644
      CLog::Log(LOGERROR, "GL: BaseYUV2RGBGLSLShader - unsupported format %d", m_format);
  
 diff --git a/xbmc/cores/VideoRenderers/WinRenderer.cpp b/xbmc/cores/VideoRenderers/WinRenderer.cpp
-index 0a08e03..f4555d6 100644
+index 6ed53dc..d470c25 100644
 --- a/xbmc/cores/VideoRenderers/WinRenderer.cpp
 +++ b/xbmc/cores/VideoRenderers/WinRenderer.cpp
 @@ -112,21 +112,19 @@ static enum PixelFormat PixelFormatFromFormat(ERenderFormat format)
@@ -3460,7 +3463,7 @@ index 2c46b0b..4d7dbb1 100644
 +  virtual void SetCodecControl(int flags) {}
  };
 diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
-index 2302772..d669c56 100644
+index aa7de02..f390b7a 100644
 --- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
 +++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
 @@ -56,6 +56,9 @@
@@ -3491,7 +3494,7 @@ index 2302772..d669c56 100644
        {
          ctx->SetHardware(vdp);
          return *cur;
-@@ -100,13 +103,26 @@ enum PixelFormat CDVDVideoCodecFFmpeg::GetFormat( struct AVCodecContext * avctx
+@@ -100,6 +103,19 @@ enum PixelFormat CDVDVideoCodecFFmpeg::GetFormat( struct AVCodecContext * avctx
        dec->Release();
    }
  #endif
@@ -3511,15 +3514,16 @@ index 2302772..d669c56 100644
  #ifdef HAVE_LIBVA
      // mpeg4 vaapi decoding is disabled
      if(*cur == PIX_FMT_VAAPI_VLD && g_guiSettings.GetBool("videoplayer.usevaapi") 
-     && (avctx->codec_id != CODEC_ID_MPEG4 || g_advancedSettings.m_videoAllowMpeg4VAAPI)) 
-     {
+@@ -111,7 +127,7 @@ enum PixelFormat CDVDVideoCodecFFmpeg::GetFormat( struct AVCodecContext * avctx
+       }
+ 
        VAAPI::CDecoder* dec = new VAAPI::CDecoder();
 -      if(dec->Open(avctx, *cur))
 +      if(dec->Open(avctx, *cur, ctx->m_uSurfacesCount))
        {
          ctx->SetHardware(dec);
          return *cur;
-@@ -143,6 +159,7 @@ CDVDVideoCodecFFmpeg::CDVDVideoCodecFFmpeg() : CDVDVideoCodec()
+@@ -148,6 +164,7 @@ CDVDVideoCodecFFmpeg::CDVDVideoCodecFFmpeg() : CDVDVideoCodec()
    m_iLastKeyframe = 0;
    m_dts = DVD_NOPTS_VALUE;
    m_started = false;
@@ -3527,7 +3531,7 @@ index 2302772..d669c56 100644
  }
  
  CDVDVideoCodecFFmpeg::~CDVDVideoCodecFFmpeg()
-@@ -208,14 +225,27 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
+@@ -213,14 +230,27 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
            continue;
  
          CLog::Log(LOGNOTICE,"CDVDVideoCodecFFmpeg::Open() Creating VDPAU(%ix%i, %d)",hints.width, hints.height, hints.codec);
@@ -3557,7 +3561,7 @@ index 2302772..d669c56 100644
          {
            m_pHardware = vdp;
            m_pCodecContext->codec_id = CODEC_ID_NONE; // ffmpeg will complain if this has been set
-@@ -351,6 +381,14 @@ void CDVDVideoCodecFFmpeg::SetDropState(bool bDrop)
+@@ -356,6 +386,14 @@ void CDVDVideoCodecFFmpeg::SetDropState(bool bDrop)
  {
    if( m_pCodecContext )
    {
@@ -3572,7 +3576,7 @@ index 2302772..d669c56 100644
      // i don't know exactly how high this should be set
      // couldn't find any good docs on it. think it varies
      // from codec to codec on what it does
-@@ -552,6 +590,7 @@ int CDVDVideoCodecFFmpeg::Decode(BYTE* pData, int iSize, double dts, double pts)
+@@ -557,6 +595,7 @@ int CDVDVideoCodecFFmpeg::Decode(BYTE* pData, int iSize, double dts, double pts)
  void CDVDVideoCodecFFmpeg::Reset()
  {
    m_started = false;
@@ -3580,7 +3584,7 @@ index 2302772..d669c56 100644
    m_iLastKeyframe = m_pCodecContext->has_b_frames;
    m_dllAvCodec.avcodec_flush_buffers(m_pCodecContext);
  
-@@ -650,6 +689,22 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(DVDVideoPicture* pDvdVideoPicture)
+@@ -655,6 +694,22 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(DVDVideoPicture* pDvdVideoPicture)
    else
      pDvdVideoPicture->pts = DVD_NOPTS_VALUE;
  
@@ -3603,7 +3607,7 @@ index 2302772..d669c56 100644
    if(!m_started)
      pDvdVideoPicture->iFlags |= DVP_FLAG_DROPPED;
  
-@@ -872,3 +927,19 @@ unsigned CDVDVideoCodecFFmpeg::GetConvergeCount()
+@@ -877,3 +932,19 @@ unsigned CDVDVideoCodecFFmpeg::GetConvergeCount()
    else
      return 0;
  }
@@ -11550,7 +11554,7 @@ index 0000000..f38444c
 +
 +}
 diff --git a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
-index 7d4e35b..c772fe9 100644
+index f9e3708..82f6962 100644
 --- a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
 +++ b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
 @@ -18,13 +18,13 @@
@@ -11568,7 +11572,7 @@ index 7d4e35b..c772fe9 100644
  #ifdef _LINUX
  #include "stdint.h"
  #endif
-@@ -497,6 +497,9 @@ bool CDVDDemuxFFmpeg::Open(CDVDInputStream* pInput)
+@@ -501,6 +501,9 @@ bool CDVDDemuxFFmpeg::Open(CDVDInputStream* pInput)
        AddStream(i);
    }
  
@@ -11578,7 +11582,7 @@ index 7d4e35b..c772fe9 100644
    return true;
  }
  
-@@ -607,6 +610,12 @@ double CDVDDemuxFFmpeg::ConvertTimestamp(int64_t pts, int den, int num)
+@@ -611,6 +614,12 @@ double CDVDDemuxFFmpeg::ConvertTimestamp(int64_t pts, int den, int num)
    if (pts == (int64_t)AV_NOPTS_VALUE)
      return DVD_NOPTS_VALUE;
  
@@ -11591,7 +11595,7 @@ index 7d4e35b..c772fe9 100644
    // do calculations in floats as they can easily overflow otherwise
    // we don't care for having a completly exact timestamp anyway
    double timestamp = (double)pts * num  / den;
-@@ -731,6 +740,24 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
+@@ -735,6 +744,24 @@ DemuxPacket* CDVDDemuxFFmpeg::Read()
            pkt.pts = AV_NOPTS_VALUE;
          }
  
@@ -11616,7 +11620,7 @@ index 7d4e35b..c772fe9 100644
          // copy contents into our own packet
          pPacket->iSize = pkt.size;
  
-@@ -847,10 +874,20 @@ bool CDVDDemuxFFmpeg::SeekTime(int time, bool backwords, double *startpts)
+@@ -851,10 +878,20 @@ bool CDVDDemuxFFmpeg::SeekTime(int time, bool backwords, double *startpts)
    int ret;
    {
      CSingleLock lock(m_critSection);
@@ -11637,7 +11641,7 @@ index 7d4e35b..c772fe9 100644
    }
  
    if(m_iCurrentPts == DVD_NOPTS_VALUE)
-@@ -869,6 +906,165 @@ bool CDVDDemuxFFmpeg::SeekTime(int time, bool backwords, double *startpts)
+@@ -873,6 +910,165 @@ bool CDVDDemuxFFmpeg::SeekTime(int time, bool backwords, double *startpts)
    return (ret >= 0);
  }
  
@@ -12603,10 +12607,10 @@ index d1c9b94..c9bf2f4 100644
  };
  
 diff --git a/xbmc/cores/omxplayer/OMXPlayerVideo.cpp b/xbmc/cores/omxplayer/OMXPlayerVideo.cpp
-index 3816000..19db8fe 100644
+index ae2da00..2d1faef 100644
 --- a/xbmc/cores/omxplayer/OMXPlayerVideo.cpp
 +++ b/xbmc/cores/omxplayer/OMXPlayerVideo.cpp
-@@ -346,25 +346,16 @@ void OMXPlayerVideo::Output(int iGroupId, double pts, bool bDropPacket)
+@@ -347,25 +347,16 @@ void OMXPlayerVideo::Output(int iGroupId, double pts, bool bDropPacket)
    m_dropbase = 0.0f;
  #endif
  
@@ -12639,7 +12643,7 @@ index 3816000..19db8fe 100644
  }
  
  void OMXPlayerVideo::Process()
-@@ -808,7 +799,7 @@ void OMXPlayerVideo::ResolutionUpdateCallBack(uint32_t width, uint32_t height)
+@@ -809,7 +800,7 @@ void OMXPlayerVideo::ResolutionUpdateCallBack(uint32_t width, uint32_t height)
  
    if(!g_renderManager.Configure(width, height,
          iDisplayWidth, iDisplayHeight, m_fFrameRate, flags, format, 0,
@@ -12791,7 +12795,7 @@ index 0e6f7ac..70084a3 100644
      bool  m_videoEnableHighQualityHwScalers;
      float m_videoAutoScaleMaxFps;
 diff --git a/xbmc/settings/GUISettings.cpp b/xbmc/settings/GUISettings.cpp
-index 33a1908..59ff283 100644
+index dc0aba3..d8e2c3c 100644
 --- a/xbmc/settings/GUISettings.cpp
 +++ b/xbmc/settings/GUISettings.cpp
 @@ -403,11 +403,16 @@ void CGUISettings::Initialize()
@@ -12811,7 +12815,12 @@ index 33a1908..59ff283 100644
    // this setting would ideally not be saved, as its value is systematically derived from videoscreen.screenmode.
    // contains an index to the resolution info array in CDisplaySettings. the only meaningful fields are iScreen, iWidth, iHeight.
  #if defined(TARGET_DARWIN)
-@@ -707,10 +712,14 @@ void CGUISettings::Initialize()
+@@ -705,14 +710,18 @@ void CGUISettings::Initialize()
+ #endif
+   AddInt(vp, "videoplayer.rendermethod", 13415, RENDER_METHOD_AUTO, renderers, SPIN_CONTROL_TEXT);
+ 
+-  AddInt(vp, "videoplayer.hqscalers", 13435, 0, 0, 10, 100, SPIN_CONTROL_INT);
++  AddInt(vp, "videoplayer.hqscalers", 13438, 0, 0, 10, 100, SPIN_CONTROL_INT);
  
  #ifdef HAVE_LIBVDPAU
    AddBool(vp, "videoplayer.usevdpau", 13425, true);
@@ -12826,7 +12835,7 @@ index 33a1908..59ff283 100644
  #ifdef HAS_DX
    AddBool(g_sysinfo.IsVistaOrHigher() ? vp: NULL, "videoplayer.usedxva2", 13427, g_sysinfo.IsVistaOrHigher() ? true : false);
  #endif
-@@ -785,7 +794,6 @@ void CGUISettings::Initialize()
+@@ -787,7 +796,6 @@ void CGUISettings::Initialize()
    AddSeparator(vp, "videoplayer.sep1.5");
  #ifdef HAVE_LIBVDPAU
    AddBool(NULL, "videoplayer.vdpauUpscalingLevel", 13121, false);

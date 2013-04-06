@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="xbmc-theme-Confluence"
-PKG_VERSION="802a856"
+PKG_VERSION="65fcfa6"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
