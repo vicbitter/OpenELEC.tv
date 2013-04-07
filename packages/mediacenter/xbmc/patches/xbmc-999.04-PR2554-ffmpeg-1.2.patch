@@ -1,0 +1,327 @@
+From 97f3562445925295889b88e232e6e2e39ac6c912 Mon Sep 17 00:00:00 2001
+From: FlyingRat <flyingrat@outlook.com>
+Date: Sun, 7 Apr 2013 12:51:52 +0200
+Subject: [PATCH] [FFmpeg] version bump to n1.2 (rev e820e3a) - XBMC related
+ files
+
+---
+ lib/Makefile.in                                    |   4 +-
+ .../gas-preprocessor-native/gas-preprocessor.pl    |  46 +-
+ xbmc/DllPaths_win32.h                              |  16 +-
+ xbmc/cores/dvdplayer/DVDAudio.h                    |   6 +-
+ xbmc/cores/dvdplayer/DVDCodecs/DVDCodecs.h         |   1 -
+ .../DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp        |   3 +
+ .../DVDCodecs/Video/DVDVideoCodecFFmpeg.h          |   2 +
+ .../DVDCodecs/Video/DVDVideoCodecLibMpeg2.cpp      |   6 -
+ xbmc/cores/dvdplayer/DVDCodecs/Video/DXVA.cpp      |   2 +-
+ xbmc/cores/dvdplayer/DVDDemuxers/DVDDemux.h        |   2 +-
+ xbmc/cores/dvdplayer/DVDPlayerAudio.h              |   2 -
+ xbmc/cores/dvdplayer/DVDStreamInfo.h               |   6 +-
+ 16 files changed, 553 insertions(+), 346 deletions(-)
+ create mode 100755 lib/ffmpeg/build_xbmc_win32.sh
+
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 37e2d2f..9ac0c06 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -75,7 +75,9 @@ endif
+ ffmpeg:
+ 	$(MAKE) -C $@
+ ifeq ($(findstring osx,$(ARCH)), osx)
+-	-$(AR) d ffmpeg/libavcodec/libavcodec.a inverse.o
++	-$(AR) d ffmpeg/libavcodec/libavcodec.a log2_tab.o
++	-$(AR) d ffmpeg/libavformat/libavformat.a log2_tab.o
++	-$(AR) d ffmpeg/libswresample/libswresample.a log2_tab.o
+ endif
+ 
+ clean:
+diff --git a/tools/depends/native/gas-preprocessor-native/gas-preprocessor.pl b/tools/depends/native/gas-preprocessor-native/gas-preprocessor.pl
+index b9decc2..57ad637 100755
+--- a/tools/depends/native/gas-preprocessor-native/gas-preprocessor.pl
++++ b/tools/depends/native/gas-preprocessor-native/gas-preprocessor.pl
+@@ -367,8 +367,11 @@ sub expand_macros {
+ }
+ 
+ close(ASMFILE) or exit 1;
+-open(ASMFILE, "|-", @gcc_cmd) or die "Error running assembler";
+-#open(ASMFILE, ">/tmp/a.S") or die "Error running assembler";
++if ($ENV{GASPP_DEBUG}) {
++    open(ASMFILE, ">&STDOUT");
++} else {
++    open(ASMFILE, "|-", @gcc_cmd) or die "Error running assembler";
++}
+ 
+ my @sections;
+ my $num_repts;
+@@ -377,6 +380,11 @@ sub expand_macros {
+ my %literal_labels;     # for ldr <reg>, =<expr>
+ my $literal_num = 0;
+ 
++my $thumb = 0;
++
++my %thumb_labels;
++my %call_targets;
++
+ my $in_irp = 0;
+ my @irp_args;
+ my $irp_param;
+@@ -396,22 +404,46 @@ sub expand_macros {
+         push(@sections, $line);
+     }
+ 
++    $thumb = 1 if $line =~ /\.code\s+16|\.thumb/;
++    $thumb = 0 if $line =~ /\.code\s+32|\.arm/;
++
+     # handle ldr <reg>, =<expr>
+     if ($line =~ /(.*)\s*ldr([\w\s\d]+)\s*,\s*=(.*)/) {
+         my $label = $literal_labels{$3};
+         if (!$label) {
+-            $label = ".Literal_$literal_num";
++            $label = "Literal_$literal_num";
+             $literal_num++;
+             $literal_labels{$3} = $label;
+         }
+         $line = "$1 ldr$2, $label\n";
+     } elsif ($line =~ /\.ltorg/) {
++        $line .= ".align 2\n";
+         foreach my $literal (keys %literal_labels) {
+             $line .= "$literal_labels{$literal}:\n .word $literal\n";
+         }
+         %literal_labels = ();
+     }
+ 
++    # thumb add with large immediate needs explicit add.w
++    if ($thumb and $line =~ /add\s+.*#([^@]+)/) {
++        $line =~ s/add/add.w/ if eval_expr($1) > 255;
++    }
++
++    # mach-o local symbol names start with L (no dot)
++    $line =~ s/(?<!\w)\.(L\w+)/$1/g;
++
++    if ($thumb and $line =~ /^\s*(\w+)\s*:/) {
++        $thumb_labels{$1}++;
++    }
++
++    if ($line =~ /^\s*((\w+\s*:\s*)?bl?x?(?:..)?(?:\.w)?|\.globl)\s+(\w+)/) {
++        if (exists $thumb_labels{$3}) {
++            print ASMFILE ".thumb_func $3\n";
++        } else {
++            $call_targets{$3}++;
++        }
++    }
++
+     # @l -> lo16()  @ha -> ha16()
+     $line =~ s/,\s+([^,]+)\@l\b/, lo16($1)/g;
+     $line =~ s/,\s+([^,]+)\@ha\b/, ha16($1)/g;
+@@ -489,9 +521,15 @@ sub expand_macros {
+ }
+ 
+ print ASMFILE ".text\n";
++print ASMFILE ".align 2\n";
+ foreach my $literal (keys %literal_labels) {
+-    print ASMFILE "$literal_labels{$literal}:\n .word $literal\n";
++    my $label = $literal_labels{$literal};
++    print ASMFILE ".set Lval_$label, $literal\n";
++    print ASMFILE "$label: .word Lval_$label\n";
+ }
+ 
++map print(ASMFILE ".thumb_func $_\n"),
++    grep exists $thumb_labels{$_}, keys %call_targets;
++
+ close(ASMFILE) or exit 1;
+ #exit 1
+diff --git a/xbmc/DllPaths_win32.h b/xbmc/DllPaths_win32.h
+index 6e53b3a..e9a4a04 100644
+--- a/xbmc/DllPaths_win32.h
++++ b/xbmc/DllPaths_win32.h
+@@ -58,13 +58,15 @@
+ #define DLL_PATH_LIBRTMP       "special://xbmcbin/system/players/dvdplayer/librtmp.dll"
+ 
+ /* ffmpeg */
+-#define DLL_PATH_LIBAVCODEC    "special://xbmcbin/system/players/dvdplayer/avcodec-53.dll"
+-#define DLL_PATH_LIBAVFORMAT   "special://xbmcbin/system/players/dvdplayer/avformat-53.dll"
+-#define DLL_PATH_LIBAVUTIL     "special://xbmcbin/system/players/dvdplayer/avutil-51.dll"
+-#define DLL_PATH_LIBAVFILTER   "special://xbmcbin/system/players/dvdplayer/avfilter-2.dll"
+-#define DLL_PATH_LIBPOSTPROC   "special://xbmcbin/system/players/dvdplayer/postproc-52.dll"
+-#define DLL_PATH_LIBSWSCALE    "special://xbmcbin/system/players/dvdplayer/swscale-2.dll"
+-#define DLL_PATH_LIBSWRESAMPLE "special://xbmcbin/system/players/dvdplayer/swresample-0.dll"
++
++/*
++** "DllPaths_generated_win32_ffmpeg.h" is generated by the win32 build
++** script: "$XBMC_SRC_ROOT/xbmc/lib/ffmpeg/build_xbmc_win32.sh" called
++** by BuildSetup.bat through buildmingwlibs.sh* 
++*/
++
++#include "DllPaths_generated_win32_ffmpeg.h"
++
+ 
+ /* cdrip */
+ #define DLL_PATH_LAME_ENC      "special://xbmcbin/system/cdrip/lame_enc.dll"
+diff --git a/xbmc/cores/dvdplayer/DVDAudio.h b/xbmc/cores/dvdplayer/DVDAudio.h
+index 700bce0..e76d443 100644
+--- a/xbmc/cores/dvdplayer/DVDAudio.h
++++ b/xbmc/cores/dvdplayer/DVDAudio.h
+@@ -30,9 +30,6 @@
+ #include "cores/AudioEngine/Utils/AEChannelInfo.h"
+ class IAEStream;
+ 
+-#ifndef _LINUX
+-enum CodecID;
+-#else
+ extern "C" {
+ #if (defined USE_EXTERNAL_FFMPEG)
+   #if (defined HAVE_LIBAVCODEC_AVCODEC_H)
+@@ -44,9 +41,8 @@
+   #include "libavcodec/avcodec.h"
+ #endif
+ }
+-#endif
+-typedef struct stDVDAudioFrame DVDAudioFrame;
+ 
++typedef struct stDVDAudioFrame DVDAudioFrame;
+ 
+ class CPTSOutputQueue
+ {
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/DVDCodecs.h b/xbmc/cores/dvdplayer/DVDCodecs/DVDCodecs.h
+index 2e68e7d..7de708c 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/DVDCodecs.h
++++ b/xbmc/cores/dvdplayer/DVDCodecs/DVDCodecs.h
+@@ -23,7 +23,6 @@
+ #if (defined HAVE_CONFIG_H) && (!defined WIN32)
+   #include "config.h"
+ #endif
+-// enum CodecID
+ 
+ #include <string>
+ #include <vector>
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
+index aa7de02..d614e39 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
+@@ -28,6 +28,7 @@
+ #include "DVDClock.h"
+ #include "DVDCodecs/DVDCodecs.h"
+ #include "DVDCodecs/DVDCodecUtils.h"
++#include "DVDVideoPPFFmpeg.h"
+ #if defined(_LINUX) || defined(_WIN32)
+ #include "utils/CPUInfo.h"
+ #endif
+@@ -162,6 +163,7 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
+   if(!m_dllAvUtil.Load()
+   || !m_dllAvCodec.Load()
+   || !m_dllSwScale.Load()
++  || !m_dllPostProc.Load()
+   || !m_dllAvFilter.Load()
+   ) return false;
+ 
+@@ -350,6 +352,7 @@ void CDVDVideoCodecFFmpeg::Dispose()
+   m_dllAvCodec.Unload();
+   m_dllAvUtil.Unload();
+   m_dllAvFilter.Unload();
++  m_dllPostProc.Unload();
+ }
+ 
+ void CDVDVideoCodecFFmpeg::SetDropState(bool bDrop)
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.h b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.h
+index e857a24..75135ef 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.h
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.h
+@@ -27,6 +27,7 @@
+ #include "DllAvUtil.h"
+ #include "DllSwScale.h"
+ #include "DllAvFilter.h"
++#include "DllPostProc.h"
+ 
+ class CVDPAU;
+ class CCriticalSection;
+@@ -111,6 +112,7 @@ class CDVDVideoCodecFFmpeg : public CDVDVideoCodec
+   DllAvUtil  m_dllAvUtil;
+   DllSwScale m_dllSwScale;
+   DllAvFilter m_dllAvFilter;
++  DllPostProc m_dllPostProc;
+ 
+   std::string m_name;
+   bool              m_bSoftware;
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecLibMpeg2.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecLibMpeg2.cpp
+index f5d0584..7af9599 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecLibMpeg2.cpp
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecLibMpeg2.cpp
+@@ -23,12 +23,6 @@
+ #include "DVDStreamInfo.h"
+ #include "utils/log.h"
+ 
+-/* I really don't want to include ffmpeg headers here, could */
+-/* potentially interfere with libmpeg2's, so let's just define this */
+-#ifndef _LINUX
+-const int CODEC_ID_MPEG1VIDEO = 1;
+-#endif
+-
+ enum MPEGProfile
+ {
+   MPEG_422_HL = 0x82,
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DXVA.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DXVA.cpp
+index 257c096..4ae2aba 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DXVA.cpp
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DXVA.cpp
+@@ -940,7 +940,7 @@ int CDecoder::GetBuffer(AVCodecContext *avctx, AVFrame *pic)
+ 
+   pic->reordered_opaque = avctx->reordered_opaque;
+   pic->type = FF_BUFFER_TYPE_USER;
+-  pic->age  = 256*256*256*64; // as everybody else, i've got no idea about this one
++  // pic->age  = 256*256*256*64;	// decrepated.
+   for(unsigned i = 0; i < 4; i++)
+   {
+     pic->data[i] = NULL;
+diff --git a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemux.h b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemux.h
+index f4111e9..b4e3ca4 100644
+--- a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemux.h
++++ b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemux.h
+@@ -35,7 +35,7 @@
+   #include "config.h"
+ #endif
+ #ifndef _LINUX
+-enum CodecID;
++// enum CodecID; // auto defined when neccesary
+ #include <libavcodec/avcodec.h>
+ #else
+ extern "C" {
+diff --git a/xbmc/cores/dvdplayer/DVDPlayerAudio.h b/xbmc/cores/dvdplayer/DVDPlayerAudio.h
+index c463182..f6aba9f 100644
+--- a/xbmc/cores/dvdplayer/DVDPlayerAudio.h
++++ b/xbmc/cores/dvdplayer/DVDPlayerAudio.h
+@@ -38,8 +38,6 @@
+ class IAudioCallback;
+ class CDVDAudioCodec;
+ 
+-enum CodecID;
+-
+ #define DECODE_FLAG_DROP    1
+ #define DECODE_FLAG_RESYNC  2
+ #define DECODE_FLAG_ERROR   4
+diff --git a/xbmc/cores/dvdplayer/DVDStreamInfo.h b/xbmc/cores/dvdplayer/DVDStreamInfo.h
+index 0b33d94..e7234e1 100644
+--- a/xbmc/cores/dvdplayer/DVDStreamInfo.h
++++ b/xbmc/cores/dvdplayer/DVDStreamInfo.h
+@@ -23,10 +23,7 @@
+ #if (defined HAVE_CONFIG_H) && (!defined WIN32)
+   #include "config.h"
+ #endif
+-#ifndef _LINUX
+-enum StreamType;
+-enum CodecID;
+-#else
++
+ #include "DVDDemuxers/DVDDemux.h"
+ extern "C" {
+ #if (defined USE_EXTERNAL_FFMPEG)
+@@ -39,7 +36,6 @@
+   #include "libavcodec/avcodec.h"
+ #endif
+ }
+-#endif
+ 
+ class CDemuxStream;
+ 
+-- 
+1.8.1.5
+
