@@ -11953,24 +11953,6 @@ index 34aa9ec..63a88c0 100644
          // if playspeed is different then DVD_PLAYSPEED_NORMAL or DVD_PLAYSPEED_PAUSE
          // audioplayer, stops outputing audio to audiorendere, but still tries to
          // sleep an correct amount for each packet
-@@ -2440,7 +2450,16 @@ bool CDVDPlayer::IsPaused() const
- 
- bool CDVDPlayer::HasVideo() const
- {
--  return m_HasVideo;
-+  bool hasVideo(false);
-+
-+  if (m_pInputStream && m_pInputStream->IsStreamType(DVDSTREAM_TYPE_DVD))
-+    hasVideo = true;
-+  else if (m_SelectionStreams.Count(STREAM_VIDEO) > 0)
-+    hasVideo = true;
-+  else if (g_renderManager.IsConfigured())
-+    hasVideo = true;
-+
-+  return hasVideo;
- }
- 
- bool CDVDPlayer::HasAudio() const
 @@ -3174,7 +3193,7 @@ bool CDVDPlayer::CloseTeletextStream(bool bWaitForBuffers)
    return true;
  }
