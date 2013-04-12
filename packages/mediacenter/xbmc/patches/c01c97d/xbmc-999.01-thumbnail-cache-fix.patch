@@ -1,0 +1,128 @@
+From 7fb00778d02ee477ccad2ce1e97ad0a91aa67384 Mon Sep 17 00:00:00 2001
+From: vicbitter <xbmcvb@gmail.com>
+Date: Tue, 16 Oct 2012 09:15:31 +0100
+Subject: [PATCH] Thumbnail Cache
+
+---
+ xbmc/video/VideoThumbLoader.cpp | 73 +++++++++++++++++++++++++++++++++++++++++
+ xbmc/video/VideoThumbLoader.h   |  3 ++
+ 2 files changed, 76 insertions(+)
+
+diff --git a/xbmc/video/VideoThumbLoader.cpp b/xbmc/video/VideoThumbLoader.cpp
+index 34c0870..ef51a30 100644
+--- a/xbmc/video/VideoThumbLoader.cpp
++++ b/xbmc/video/VideoThumbLoader.cpp
+@@ -116,12 +116,19 @@ CVideoThumbLoader::CVideoThumbLoader() :
+   CThumbLoader(1), CJobQueue(true), m_pStreamDetailsObs(NULL)
+ {
+   m_database = new CVideoDatabase();
++
++  // Add cache
++  m_itemCache = new CFileItemList();
++  m_itemCache->SetFastLookup(true);
+ }
+ 
+ CVideoThumbLoader::~CVideoThumbLoader()
+ {
+   StopThread();
+   delete m_database;
++
++  // Delete cache
++  delete m_itemCache;
+ }
+ 
+ void CVideoThumbLoader::Initialize()
+@@ -188,6 +195,60 @@ bool CVideoThumbLoader::LoadItem(CFileItem* pItem)
+   ||  pItem->IsParentFolder())
+     return false;
+ 
++  // Does the item already exist in the cache?
++  bool bSaveThumbInCache = (strstr(pItem->GetPath(), "videodb://") != NULL) || (pItem->GetVideoInfoTag()->m_type != "tvshow");
++  unsigned int duration = XbmcThreads::SystemClockMillis();
++
++  if (bSaveThumbInCache)
++    {
++    CLog::Log(LOGDEBUG,"%s - Looking for %s in the cache", __FUNCTION__, pItem->GetPath().c_str());
++
++    CFileItemPtr thumbitemPtr = boost::static_pointer_cast<CFileItem>(m_itemCache->Get(pItem->GetPath()));
++
++    if (thumbitemPtr)
++      { 
++      CLog::Log(LOGDEBUG,"%s - RETRIEVE - %s from the cache", __FUNCTION__, thumbitemPtr->GetPath().c_str());
++
++      // Just copy over the stream details if we don't already have one
++      if (thumbitemPtr->GetVideoInfoTag()->HasStreamDetails())
++        pItem->GetVideoInfoTag()->m_streamDetails = thumbitemPtr->GetVideoInfoTag()->m_streamDetails;
++
++      if (thumbitemPtr->GetVideoInfoTag()->m_duration != 0)
++        pItem->GetVideoInfoTag()->m_duration = thumbitemPtr->GetVideoInfoTag()->m_duration;
++
++      if (!thumbitemPtr->GetArt().empty())
++        pItem->SetArt(thumbitemPtr->GetArt());
++
++      if (thumbitemPtr->HasArt("fanart"))
++        pItem->SetArt("fanart", thumbitemPtr->GetArt("fanart"));
++
++      if (thumbitemPtr->HasArt("tvshowthumb"))
++       	pItem->SetArt("tvshowthumb", thumbitemPtr->GetArt("tvshowthumb"));
++
++      if (thumbitemPtr->HasArt("seasonthumb"))
++       	pItem->SetArt("seasonthumb", thumbitemPtr->GetArt("seasonthumb"));
++
++      if (thumbitemPtr->HasArt("thumb"))
++      {
++        if (thumbitemPtr->HasProperty("HasAutoThumb"))
++          pItem->SetProperty("HasAutoThumb", thumbitemPtr->GetProperty("HasAutoThumb"));
++
++        if (thumbitemPtr->HasProperty("AutoThumbImage"))
++          pItem->SetProperty("AutoThumbImage", thumbitemPtr->GetProperty("AutoThumbImage"));
++
++        pItem->SetArt("thumb", thumbitemPtr->GetArt("thumb"));
++      }
++    
++      CLog::Log(LOGDEBUG, "%s - Finished in %dms", __FUNCTION__, XbmcThreads::SystemClockMillis() - duration);
++
++      return true;
++      }
++    else
++      {
++      CLog::Log(LOGDEBUG,"%s - ADD - %s isnt't in the cache", __FUNCTION__, pItem->GetPath().c_str());
++      }
++    }
++
+   m_database->Open();
+ 
+   if (pItem->HasVideoInfoTag() && !pItem->GetVideoInfoTag()->HasStreamDetails() && pItem->IsVideo())
+@@ -279,6 +341,17 @@ bool CVideoThumbLoader::LoadItem(CFileItem* pItem)
+     AddJob(extract);
+   }
+ 
++  // Add to the cache...
++  if (bSaveThumbInCache)
++  {
++    CLog::Log(LOGDEBUG,"ADD - %s - Adding %s to the cache", __FUNCTION__, pItem->GetPath().c_str());
++
++    CFileItemPtr newItem(new CFileItem(*pItem));
++    m_itemCache->Add(newItem);
++
++    CLog::Log(LOGDEBUG, "%s - Finished in %dms", __FUNCTION__, XbmcThreads::SystemClockMillis() - duration);
++  }
++
+   m_database->Close();
+   return true;
+ }
+diff --git a/xbmc/video/VideoThumbLoader.h b/xbmc/video/VideoThumbLoader.h
+index ce99ad9..8fe6174 100644
+--- a/xbmc/video/VideoThumbLoader.h
++++ b/xbmc/video/VideoThumbLoader.h
+@@ -125,4 +125,7 @@ protected:
+   CVideoDatabase *m_database;
+   typedef std::map<int, std::map<std::string, std::string> > ArtCache;
+   ArtCache m_showArt;
++
++// cache
++  CFileItemList *m_itemCache;
+ };
+-- 
+1.7.11.7
+
