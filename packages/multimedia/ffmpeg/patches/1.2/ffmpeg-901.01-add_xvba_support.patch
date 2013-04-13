@@ -1,22 +1,22 @@
-From 8220582c6f6362e154fe2035c0aa0abbad465d0e Mon Sep 17 00:00:00 2001
-Date: Tue, 19 Mar 2013 07:45:35 +0000
-Subject: [PATCH] xvba support
+From 67895a77c9e5f519166dd0ce4a2a98649194b11b Mon Sep 17 00:00:00 2001
+From: Rainer Hochecker <fernetmenta@online.de>
+Date: Sat, 8 Oct 2011 16:45:13 +0200
+Subject: [PATCH] ffmpeg: add xvba hwaccel
 
 ---
- configure                  |   11 +++
- libavcodec/Makefile        |    6 ++
- libavcodec/allcodecs.c     |    4 +
- libavcodec/h264.c          |    3 +
- libavcodec/xvba.c          |   66 +++++++++++++++
- libavcodec/xvba.h          |   71 ++++++++++++++++
- libavcodec/xvba_h264.c     |  187 +++++++++++++++++++++++++++++++++++++++++++
- libavcodec/xvba_internal.h |   24 ++++++
- libavcodec/xvba_mpeg2.c    |   52 ++++++++++++
- libavcodec/xvba_vc1.c      |  191 ++++++++++++++++++++++++++++++++++++++++++++
- libavcodec/xvmc_internal.h |    4 +-
- libavutil/pixdesc.c        |    6 ++
- libavutil/pixfmt.h         |    1 +
- 13 files changed, 625 insertions(+), 1 deletion(-)
+ configure                  |  11 ++
+ libavcodec/Makefile        |   6 ++
+ libavcodec/allcodecs.c     |   4 +
+ libavcodec/h264.c          |   3 +
+ libavcodec/xvba.c          |  66 ++++++++++++
+ libavcodec/xvba.h          |  71 +++++++++++++
+ libavcodec/xvba_h264.c     | 192 ++++++++++++++++++++++++++++++++++
+ libavcodec/xvba_internal.h |  24 +++++
+ libavcodec/xvba_mpeg2.c    |  52 +++++++++
+ libavcodec/xvba_vc1.c      | 190 +++++++++++++++++++++++++++++++++
+ libavutil/pixdesc.c        |   6 ++
+ libavutil/pixfmt.h         |   1 +
+ 12 files changed, 626 insertions(+)
  create mode 100644 libavcodec/xvba.c
  create mode 100644 libavcodec/xvba.h
  create mode 100644 libavcodec/xvba_h264.c
@@ -25,7 +25,7 @@ Subject: [PATCH] xvba support
  create mode 100644 libavcodec/xvba_vc1.c
 
 diff --git a/configure b/configure
-index dff53d8..723f039 100755
+index 351611d..876a6ea 100755
 --- a/configure
 +++ b/configure
 @@ -144,6 +144,7 @@ Hardware accelerators:
@@ -36,7 +36,7 @@ index dff53d8..723f039 100755
  
  Individual component options:
    --disable-everything     disable all components listed below
-@@ -1196,6 +1197,7 @@ HWACCEL_LIST="
+@@ -1197,6 +1198,7 @@ HWACCEL_LIST="
      vaapi
      vda
      vdpau
@@ -44,59 +44,57 @@ index dff53d8..723f039 100755
  "
  
  LIBRARY_LIST="
-@@ -1814,6 +1816,7 @@ wmv2_decoder_select="h263_decoder"
- wmv2_encoder_select="h263_encoder"
- wmv3_decoder_select="vc1_decoder"
- wmv3image_decoder_select="wmv3_decoder"
-+wmv3_xvba_hwaccel_select="vc1_xvba_hwaccel"
- zerocodec_decoder_select="zlib"
- zlib_decoder_select="zlib"
- zlib_encoder_select="zlib"
-@@ -1826,6 +1829,7 @@ dxva2_deps="dxva2api_h"
+@@ -1827,6 +1829,7 @@ crystalhd_deps="libcrystalhd_libcrystalhd_if_h"
+ dxva2_deps="dxva2api_h"
  vaapi_deps="va_va_h"
  vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
- vda_extralibs="-framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore"
 +xvba_deps="amd_amdxvba_h"
+ vda_extralibs="-framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore"
  vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
  
- h263_vaapi_hwaccel_deps="vaapi"
-@@ -1841,6 +1845,8 @@ h264_vda_decoder_deps="vda"
- h264_vda_decoder_select="h264_decoder"
- h264_vda_hwaccel_deps="vda"
- h264_vda_hwaccel_select="h264_decoder"
-+h264_xvba_hwaccel_deps="xvba"
-+h264_xvba_hwaccel_select="h264_decoder"
- h264_vdpau_decoder_deps="vdpau"
+@@ -1847,6 +1850,8 @@ h264_vdpau_decoder_deps="vdpau"
  h264_vdpau_decoder_select="h264_decoder"
  h264_vdpau_hwaccel_deps="vdpau"
-@@ -1861,6 +1867,8 @@ mpeg2_vdpau_hwaccel_select="mpeg2video_decoder"
+ h264_vdpau_hwaccel_select="h264_decoder"
++h264_xvba_hwaccel_select="h264_decoder"
++h264_xvba_hwaccel_deps="xvba"
+ mpeg_vdpau_decoder_deps="vdpau"
+ mpeg_vdpau_decoder_select="mpegvideo_decoder"
+ mpeg1_vdpau_decoder_deps="vdpau"
+@@ -1859,6 +1864,8 @@ mpeg2_dxva2_hwaccel_select="mpeg2video_decoder"
+ mpeg2_vaapi_hwaccel_deps="vaapi"
+ mpeg2_vaapi_hwaccel_select="mpeg2video_decoder"
+ mpeg2_vdpau_hwaccel_deps="vdpau"
++mpeg2_xvba_hwaccel_select="mpeg2video_decoder"
++mpeg2_xvba_hwaccel_deps="xvba"
+ mpeg2_vdpau_hwaccel_select="mpeg2video_decoder"
  mpeg4_crystalhd_decoder_select="crystalhd"
  mpeg4_vaapi_hwaccel_deps="vaapi"
- mpeg4_vaapi_hwaccel_select="mpeg4_decoder"
-+mpeg2_xvba_hwaccel_deps="xvba"
-+mpeg2_xvba_hwaccel_select="mpeg2video_decoder"
- mpeg4_vdpau_decoder_deps="vdpau"
- mpeg4_vdpau_decoder_select="mpeg4_decoder"
- mpeg4_vdpau_hwaccel_deps="vdpau"
-@@ -1871,6 +1879,8 @@ vc1_dxva2_hwaccel_deps="dxva2"
- vc1_dxva2_hwaccel_select="vc1_decoder"
- vc1_vaapi_hwaccel_deps="vaapi"
- vc1_vaapi_hwaccel_select="vc1_decoder"
-+vc1_xvba_hwaccel_deps="xvba"
-+vc1_xvba_hwaccel_select="vc1_decoder"
- vc1_vdpau_decoder_deps="vdpau"
+@@ -1877,11 +1884,14 @@ vc1_vdpau_decoder_deps="vdpau"
  vc1_vdpau_decoder_select="vc1_decoder"
  vc1_vdpau_hwaccel_deps="vdpau"
-@@ -3832,6 +3842,7 @@ check_header VideoDecodeAcceleration/VDADecoder.h
- check_header windows.h
- check_header X11/extensions/XvMClib.h
- check_header asm/types.h
-+check_header amd/amdxvba.h
+ vc1_vdpau_hwaccel_select="vc1_decoder"
++vc1_xvba_hwaccel_select="vc1_decoder"
++vc1_xvba_hwaccel_deps="xvba"
+ wmv3_crystalhd_decoder_select="crystalhd"
+ wmv3_dxva2_hwaccel_select="vc1_dxva2_hwaccel"
+ wmv3_vaapi_hwaccel_select="vc1_vaapi_hwaccel"
+ wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
+ wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
++wmv3_xvba_hwaccel_select="vc1_xvba_hwaccel"
  
- disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
- disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
+ # parsers
+ h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
+@@ -3832,6 +3842,7 @@ check_header termios.h
+ check_header unistd.h
+ check_header vdpau/vdpau.h
+ check_header vdpau/vdpau_x11.h
++check_header amd/amdxvba.h
+ check_cpp_condition vdpau/vdpau.h "defined(VDP_DECODER_PROFILE_MPEG4_PART2_SP)" && enable vdpau_mpeg4_support
+ 
+ check_header VideoDecodeAcceleration/VDADecoder.h
 diff --git a/libavcodec/Makefile b/libavcodec/Makefile
-index dc065a5..e4f6c44 100644
+index dc065a5..c386923 100644
 --- a/libavcodec/Makefile
 +++ b/libavcodec/Makefile
 @@ -12,6 +12,7 @@ HEADERS = avcodec.h                                                     \
@@ -115,68 +113,70 @@ index dc065a5..e4f6c44 100644
  OBJS-$(CONFIG_VIDEODSP)                += videodsp.o
  OBJS-$(CONFIG_VP3DSP)                  += vp3dsp.o
  
-@@ -230,6 +232,7 @@ OBJS-$(CONFIG_H264_DECODER)            += h264.o                               \
- OBJS-$(CONFIG_H264_DXVA2_HWACCEL)      += dxva2_h264.o
- OBJS-$(CONFIG_H264_VAAPI_HWACCEL)      += vaapi_h264.o
+@@ -232,6 +234,7 @@ OBJS-$(CONFIG_H264_VAAPI_HWACCEL)      += vaapi_h264.o
  OBJS-$(CONFIG_H264_VDA_HWACCEL)        += vda_h264.o
-+OBJS-$(CONFIG_H264_XVBA_HWACCEL)       += xvba_h264.o
  OBJS-$(CONFIG_H264_VDA_DECODER)        += vda_h264_dec.o
  OBJS-$(CONFIG_H264_VDPAU_HWACCEL)      += vdpau_h264.o
++OBJS-$(CONFIG_H264_XVBA_HWACCEL)       += xvba_h264.o
  OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o huffyuvdec.o
-@@ -294,6 +297,7 @@ OBJS-$(CONFIG_MPEG1VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
-                                           timecode.o
+ OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o huffyuvenc.o
+ OBJS-$(CONFIG_IAC_DECODER)             += imc.o
+@@ -295,6 +298,7 @@ OBJS-$(CONFIG_MPEG1VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
  OBJS-$(CONFIG_MPEG2_DXVA2_HWACCEL)     += dxva2_mpeg2.o
  OBJS-$(CONFIG_MPEG2_VAAPI_HWACCEL)     += vaapi_mpeg2.o
-+OBJS-$(CONFIG_MPEG2_XVBA_HWACCEL)      += xvba_mpeg2.o
  OBJS-$(CONFIG_MPEG2_VDPAU_HWACCEL)     += vdpau_mpeg12.o
++OBJS-$(CONFIG_MPEG2_XVBA_HWACCEL)      += xvba_mpeg2.o
  OBJS-$(CONFIG_MPEG2VIDEO_DECODER)      += mpeg12.o mpeg12data.o
  OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
-@@ -458,6 +462,7 @@ OBJS-$(CONFIG_VC1_DECODER)             += vc1dec.o vc1.o vc1data.o vc1dsp.o \
-                                           intrax8.o intrax8dsp.o
+                                           timecode.o
+@@ -459,6 +463,7 @@ OBJS-$(CONFIG_VC1_DECODER)             += vc1dec.o vc1.o vc1data.o vc1dsp.o \
  OBJS-$(CONFIG_VC1_DXVA2_HWACCEL)       += dxva2_vc1.o
  OBJS-$(CONFIG_VC1_VAAPI_HWACCEL)       += vaapi_vc1.o
-+OBJS-$(CONFIG_VC1_XVBA_HWACCEL)        += xvba_vc1.o
  OBJS-$(CONFIG_VC1_VDPAU_HWACCEL)       += vdpau_vc1.o
++OBJS-$(CONFIG_VC1_XVBA_HWACCEL)        += xvba_vc1.o
  OBJS-$(CONFIG_VCR1_DECODER)            += vcr1.o
  OBJS-$(CONFIG_VMDAUDIO_DECODER)        += vmdav.o
-@@ -789,6 +794,7 @@ SKIPHEADERS-$(CONFIG_LIBUTVIDEO)       += libutvideo.h
+ OBJS-$(CONFIG_VMDVIDEO_DECODER)        += vmdav.o
+@@ -788,6 +793,7 @@ SKIPHEADERS-$(CONFIG_LIBSCHROEDINGER)  += libschroedinger.h
+ SKIPHEADERS-$(CONFIG_LIBUTVIDEO)       += libutvideo.h
  SKIPHEADERS-$(CONFIG_MPEG_XVMC_DECODER) += xvmc.h
  SKIPHEADERS-$(CONFIG_VAAPI)            += vaapi_internal.h
- SKIPHEADERS-$(CONFIG_VDA)              += vda.h
 +SKIPHEADERS-$(CONFIG_XVBA)             += xvba_internal.h
+ SKIPHEADERS-$(CONFIG_VDA)              += vda.h
  SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h
  SKIPHEADERS-$(HAVE_OS2THREADS)         += os2threads.h
- SKIPHEADERS-$(HAVE_W32THREADS)         += w32pthreads.h
 diff --git a/libavcodec/allcodecs.c b/libavcodec/allcodecs.c
-index 584446f..c59d4d4 100644
+index 584446f..7a8f61c 100644
 --- a/libavcodec/allcodecs.c
 +++ b/libavcodec/allcodecs.c
-@@ -80,16 +80,20 @@ void avcodec_register_all(void)
+@@ -79,18 +79,22 @@ void avcodec_register_all(void)
+     REGISTER_HWACCEL(H264_VAAPI,        h264_vaapi);
      REGISTER_HWACCEL(H264_VDA,          h264_vda);
      REGISTER_HWACCEL(H264_VDPAU,        h264_vdpau);
-     REGISTER_HWACCEL(MPEG1_VDPAU,       mpeg1_vdpau);
 +    REGISTER_HWACCEL(H264_XVBA,         h264_xvba);
+     REGISTER_HWACCEL(MPEG1_VDPAU,       mpeg1_vdpau);
      REGISTER_HWACCEL(MPEG2_DXVA2,       mpeg2_dxva2);
      REGISTER_HWACCEL(MPEG2_VAAPI,       mpeg2_vaapi);
      REGISTER_HWACCEL(MPEG2_VDPAU,       mpeg2_vdpau);
-     REGISTER_HWACCEL(MPEG4_VAAPI,       mpeg4_vaapi);
 +    REGISTER_HWACCEL(MPEG2_XVBA,        mpeg2_xvba);
+     REGISTER_HWACCEL(MPEG4_VAAPI,       mpeg4_vaapi);
      REGISTER_HWACCEL(MPEG4_VDPAU,       mpeg4_vdpau);
      REGISTER_HWACCEL(VC1_DXVA2,         vc1_dxva2);
      REGISTER_HWACCEL(VC1_VAAPI,         vc1_vaapi);
-+    REGISTER_HWACCEL(VC1_XVBA,          vc1_xvba);
      REGISTER_HWACCEL(VC1_VDPAU,         vc1_vdpau);
++    REGISTER_HWACCEL(VC1_XVBA,          vc1_xvba);
      REGISTER_HWACCEL(WMV3_DXVA2,        wmv3_dxva2);
      REGISTER_HWACCEL(WMV3_VAAPI,        wmv3_vaapi);
-+    REGISTER_HWACCEL(WMV3_XVBA,         wmv3_xvba);
      REGISTER_HWACCEL(WMV3_VDPAU,        wmv3_vdpau);
++    REGISTER_HWACCEL(WMV3_XVBA,         wmv3_xvba);
  
      /* video codecs */
+     REGISTER_ENCODER(A64MULTI,          a64multi);
 diff --git a/libavcodec/h264.c b/libavcodec/h264.c
-index 3a83b4b..96b6c30 100644
+index 937ad7a..299039f 100644
 --- a/libavcodec/h264.c
 +++ b/libavcodec/h264.c
-@@ -81,6 +81,9 @@ static const enum AVPixelFormat h264_hwaccel_pixfmt_list_420[] = {
+@@ -81,6 +81,9 @@
  #if CONFIG_H264_VDPAU_HWACCEL
      AV_PIX_FMT_VDPAU,
  #endif
@@ -260,7 +260,7 @@ index 0000000..be29e5d
 +
 diff --git a/libavcodec/xvba.h b/libavcodec/xvba.h
 new file mode 100644
-index 0000000..659559f
+index 0000000..9f9ff0c
 --- /dev/null
 +++ b/libavcodec/xvba.h
 @@ -0,0 +1,71 @@
@@ -329,7 +329,7 @@ index 0000000..659559f
 +  void *surface;
 +  XVBAPictureDescriptor *picture_descriptor;
 +  XVBAQuantMatrixAvc *iq_matrix;
-+  int num_slices;
++  unsigned int num_slices;
 +  struct xvba_bitstream_buffers *buffers;
 +  uint32_t buffers_alllocated;
 +};
@@ -337,10 +337,10 @@ index 0000000..659559f
 +#endif /* AVCODEC_XVBA_H */
 diff --git a/libavcodec/xvba_h264.c b/libavcodec/xvba_h264.c
 new file mode 100644
-index 0000000..f94550e
+index 0000000..ae45f3a
 --- /dev/null
 +++ b/libavcodec/xvba_h264.c
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,192 @@
 +/*
 + * H.264 HW decode acceleration through XVBA
 + *
@@ -443,10 +443,16 @@ index 0000000..f94550e
 +  pic_descriptor->avc_num_ref_frames                          = h->sps.ref_frame_count;
 +  pic_descriptor->avc_reserved_8bit                           = 0;
 +
-+  /* Set correct level */
-+  if (pic_descriptor->level == 41) {
++  /* Set a level that can decode stuff in every case without a lookup table 
++     xvba seems to have problems only when the number of Reframes goes beyond
++     the max support number of Level4.1@High. So in praxis decoding a Level 3.0
++     file that in deed has level4.1@High specs does not matter. We use this fact
++     and check if the ref_frames stay in the range Level4.1@high can decode if
++     not, we set Level5.1 */
++  if (pic_descriptor->avc_num_ref_frames > 4) {
 +    const unsigned int mbw = pic_descriptor->width_in_mb;
 +    const unsigned int mbh = pic_descriptor->height_in_mb;
++    // this matches Level4.1@High stats to differ between <= 4.1 and 5.1
 +    const unsigned int max_ref_frames = 12288 * 1024 / (mbw * mbh * 384);
 +    const unsigned int num_ref_frames = pic_descriptor->avc_num_ref_frames;
 +    if (max_ref_frames < num_ref_frames)
@@ -497,7 +503,7 @@ index 0000000..f94550e
 +      h->got_first_iframe = 1;
 +  }
 +
-+  ff_h264_draw_horiz_band(h, 0, h->avctx->height);
++  ff_draw_horiz_band(h->avctx, &h->dsp, h->cur_pic_ptr, NULL, 0, h->avctx->height, h->picture_structure, h->first_field, 0, 0, 0, 0);
 +
 +  return 0;
 +}
@@ -527,7 +533,6 @@ index 0000000..f94550e
 +    .end_frame      = end_frame,
 +    .decode_slice   = decode_slice,
 +};
-+
 diff --git a/libavcodec/xvba_internal.h b/libavcodec/xvba_internal.h
 new file mode 100644
 index 0000000..9653f85
@@ -618,10 +623,10 @@ index 0000000..0fc7d78
 +};
 diff --git a/libavcodec/xvba_vc1.c b/libavcodec/xvba_vc1.c
 new file mode 100644
-index 0000000..4e9f358
+index 0000000..bf3d9c2
 --- /dev/null
 +++ b/libavcodec/xvba_vc1.c
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,190 @@
 +/*
 + * VC-1 HW decode acceleration through XVBA
 + *
@@ -766,7 +771,7 @@ index 0000000..4e9f358
 +        break;
 +    }
 +
-+    ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
++    ff_draw_horiz_band(s->avctx, &s->dsp, s->current_picture_ptr, s->last_picture_ptr, 0, s->avctx->height, s->picture_structure, s->first_field, (s->unrestricted_mv && !s->intra_only), s->low_delay, s->v_edge_pos, s->h_edge_pos);
 +
 +    return 0;
 +}
@@ -812,25 +817,11 @@ index 0000000..4e9f358
 +    .end_frame      = end_frame,
 +    .decode_slice   = decode_slice,
 +};
-+
-diff --git a/libavcodec/xvmc_internal.h b/libavcodec/xvmc_internal.h
-index 04197ce..d925eb1 100644
---- a/libavcodec/xvmc_internal.h
-+++ b/libavcodec/xvmc_internal.h
-@@ -1,5 +1,7 @@
- /*
-- * XVideo Motion Compensation internal functions
-+ * HW decode acceleration for MPEG-2, H.264 and VC-1
-+ *
-+ * Copyright (C) 2005-2011 Team XBMC
-  *
-  * This file is part of FFmpeg.
-  *
 diff --git a/libavutil/pixdesc.c b/libavutil/pixdesc.c
 index 1016dba..53dfec1 100644
 --- a/libavutil/pixdesc.c
 +++ b/libavutil/pixdesc.c
-@@ -1141,6 +1141,12 @@ const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
+@@ -1141,6 +1141,12 @@ void av_write_image_line(const uint16_t *src,
          .log2_chroma_h = 1,
          .flags = PIX_FMT_HWACCEL,
      },
@@ -844,17 +835,17 @@ index 1016dba..53dfec1 100644
          .name = "yuv420p9le",
          .nb_components = 3,
 diff --git a/libavutil/pixfmt.h b/libavutil/pixfmt.h
-index 1c00ac4..47df815 100644
+index 1c00ac4..6437e29 100644
 --- a/libavutil/pixfmt.h
 +++ b/libavutil/pixfmt.h
-@@ -133,6 +133,7 @@ enum AVPixelFormat {
-     AV_PIX_FMT_YUV444P16BE,  ///< planar YUV 4:4:4, 48bpp, (1 Cr & Cb sample per 1x1 Y samples), big-endian
-     AV_PIX_FMT_VDPAU_MPEG4,  ///< MPEG4 HW decoding with VDPAU, data[0] contains a vdpau_render_state struct which contains the bitstream of the slices as well as various fields extracted from headers
-     AV_PIX_FMT_DXVA2_VLD,    ///< HW decoding through DXVA2, Picture.data[3] contains a LPDIRECT3DSURFACE9 pointer
-+    AV_PIX_FMT_XVBA_VLD,     ///< HW decoding through DXVA2, Picture.data[3] contains a vaapi_render_state struct which contains the bitstream of the slices as well as various fields extracted from headers
+@@ -124,6 +124,7 @@ enum AVPixelFormat {
+     AV_PIX_FMT_VAAPI_MOCO, ///< HW acceleration through VA API at motion compensation entry-point, Picture.data[3] contains a vaapi_render_state struct which contains macroblocks as well as various fields extracted from headers
+     AV_PIX_FMT_VAAPI_IDCT, ///< HW acceleration through VA API at IDCT entry-point, Picture.data[3] contains a vaapi_render_state struct which contains fields extracted from headers
+     AV_PIX_FMT_VAAPI_VLD,  ///< HW decoding through VA API, Picture.data[3] contains a vaapi_render_state struct which contains the bitstream of the slices as well as various fields extracted from headers
++    AV_PIX_FMT_XVBA_VLD,  ///< HW decoding through xvba, Picture.data[3] contains a xvba_rander_state struct which contains the bitstream of the slices
  
-     AV_PIX_FMT_RGB444LE,  ///< packed RGB 4:4:4, 16bpp, (msb)4A 4R 4G 4B(lsb), little-endian, most significant bits to 0
-     AV_PIX_FMT_RGB444BE,  ///< packed RGB 4:4:4, 16bpp, (msb)4A 4R 4G 4B(lsb), big-endian, most significant bits to 0
+     AV_PIX_FMT_YUV420P16LE,  ///< planar YUV 4:2:0, 24bpp, (1 Cr & Cb sample per 2x2 Y samples), little-endian
+     AV_PIX_FMT_YUV420P16BE,  ///< planar YUV 4:2:0, 24bpp, (1 Cr & Cb sample per 2x2 Y samples), big-endian
 -- 
-1.7.10.4
+1.8.1.5
 

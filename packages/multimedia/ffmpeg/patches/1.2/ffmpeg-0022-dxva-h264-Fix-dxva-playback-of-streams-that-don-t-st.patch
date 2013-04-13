@@ -1,6 +1,8 @@
-From 6f572466d5ed62c984dfc11597ed122006d681a1 Mon Sep 17 00:00:00 2001
-Date: Sat, 16 Mar 2013 09:04:05 +0000
-Subject: [PATCH] xbmc
+From 95b4c0af771121001967e01c1a13125c13178e25 Mon Sep 17 00:00:00 2001
+From: marc <mhocking@ubuntu-desktop.(none)>
+Date: Mon, 18 Feb 2013 17:18:18 +0000
+Subject: [PATCH] dxva-h264 Fix dxva playback of streams that don't  start
+ with an I-Frame.
 
 ---
  libavcodec/dxva2_h264.c |    8 ++++++++
@@ -9,11 +11,11 @@ Subject: [PATCH] xbmc
  3 files changed, 12 insertions(+)
 
 diff --git a/libavcodec/dxva2_h264.c b/libavcodec/dxva2_h264.c
-index f57ee54..6ae5cd9 100644
+index f7d4e5d..2ad4afd 100644
 --- a/libavcodec/dxva2_h264.c
 +++ b/libavcodec/dxva2_h264.c
-@@ -431,6 +431,14 @@ static int dxva2_h264_end_frame(AVCodecContext *avctx)
- 
+@@ -431,6 +431,14 @@
+
      if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
          return -1;
 +
@@ -28,30 +30,30 @@ index f57ee54..6ae5cd9 100644
                                      &ctx_pic->pp, sizeof(ctx_pic->pp),
                                      &ctx_pic->qm, sizeof(ctx_pic->qm),
 diff --git a/libavcodec/h264.c b/libavcodec/h264.c
-index 3a83b4b..937ad7a 100644
+index 0aab4e7..aee9407 100644
 --- a/libavcodec/h264.c
 +++ b/libavcodec/h264.c
-@@ -2597,6 +2597,7 @@ static void flush_dpb(AVCodecContext *avctx)
+@@ -2183,6 +2183,7 @@ static void flush_dpb(AVCodecContext *avctx)
              h->delayed_pic[i]->f.reference = 0;
          h->delayed_pic[i] = NULL;
      }
 +    h->got_first_iframe = 0;
  
      flush_change(h);
- 
-@@ -3022,6 +3023,7 @@ static int h264_slice_header_init(H264Context *h, int reinit)
-         free_tables(h, 0);
-     h->first_field = 0;
+     ff_mpeg_flush(avctx);
+@@ -2597,6 +2598,7 @@ static int h264_slice_header_init(H264Context *h, int reinit)
+     }
+     s->first_field = 0;
      h->prev_interlaced_frame = 1;
 +    h->got_first_iframe = 0;
  
      init_scan_tables(h);
      if (ff_h264_alloc_tables(h) < 0) {
 diff --git a/libavcodec/h264.h b/libavcodec/h264.h
-index 03be472..7ea613c 100644
+index 4b6a19e..06c2384 100644
 --- a/libavcodec/h264.h
 +++ b/libavcodec/h264.h
-@@ -629,6 +629,8 @@ typedef struct H264Context {
+@@ -588,6 +588,8 @@ typedef struct H264Context {
      int luma_weight_flag[2];    ///< 7.4.3.2 luma_weight_lX_flag
      int chroma_weight_flag[2];  ///< 7.4.3.2 chroma_weight_lX_flag
  
