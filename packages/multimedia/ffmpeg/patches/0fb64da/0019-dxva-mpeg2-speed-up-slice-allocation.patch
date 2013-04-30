@@ -1,0 +1,83 @@
+From 0387ad2c448ea4362c91b0fd0ea4b17196e9d52e Mon Sep 17 00:00:00 2001
+From: Lars Hammarstrand <lars.hammarstrand@gmail.com>
+Date: Fri, 19 Apr 2013 14:37:19 +0200
+Subject: [PATCH] Refactored for ffmpeg master head (rev 007989c)
+
+> From 681f74b224e16a4df7f8c4e31a9be56975d57e10 Mon Sep 17 00:00:00 2001
+> From: CrystalP <CrystalP@xbmc.org>
+> Date: Mon, 10 Oct 2011 19:42:50 -0400
+> Subject: [PATCH 19/24] dxva-mpeg2 speed up slice allocation
+
+The number of slices is not very likely to change from frame to frame, so
+at the beginning of a new frame, allocate memory for the amount of slices of
+the previous frame. Saves a lot of reallocation, for some TV capture samples
+there are over 200 slices.
+
+There wasn't anywhere really appropriate to store last_slice_count (needs to
+live from first frame to last frame), so this is likely to cause discussion to
+merge upstream.
+Adding members to dxva_context breaks ABI, which we don't care too much about
+since on Windows we don't support external ffmpeg.
+dxva mpeg2 code also has access to MpegEncContext, but adding there would
+likely break ABI as well.
+---
+ libavcodec/dxva2.h       |  2 ++
+ libavcodec/dxva2_mpeg2.c | 14 ++++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/libavcodec/dxva2.h b/libavcodec/dxva2.h
+index ac39e06..e03802c 100644
+--- a/libavcodec/dxva2.h
++++ b/libavcodec/dxva2.h
+@@ -86,6 +86,8 @@ struct dxva_context {
+      * Private to the FFmpeg AVHWAccel implementation
+      */
+     unsigned report_id;
++    unsigned last_slice_count;
++
+ };
+ 
+ /**
+diff --git a/libavcodec/dxva2_mpeg2.c b/libavcodec/dxva2_mpeg2.c
+index 0f245d1..f68620a 100644
+--- a/libavcodec/dxva2_mpeg2.c
++++ b/libavcodec/dxva2_mpeg2.c
+@@ -224,6 +224,16 @@ static int dxva2_mpeg2_start_frame(AVCodecContext *avctx,
+     ctx_pic->slice_alloc    = 0;
+     ctx_pic->bitstream_size = 0;
+     ctx_pic->bitstream      = NULL;
++
++    if (ctx->last_slice_count > 0)
++    {
++        ctx_pic->slice = av_fast_realloc(NULL,
++                                         &ctx_pic->slice_alloc,
++                                         ctx->last_slice_count * sizeof(DXVA_SliceInfo));
++        if (!ctx_pic->slice)
++            return -1;
++    }
++
+     return 0;
+ }
+ 
+@@ -258,6 +268,8 @@ static int dxva2_mpeg2_end_frame(AVCodecContext *avctx)
+     struct MpegEncContext *s = avctx->priv_data;
+     struct dxva2_picture_context *ctx_pic =
+         s->current_picture_ptr->hwaccel_picture_private;
++    struct dxva_context *ctx = avctx->hwaccel_context;
++
+     int ret;
+ 
+     if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
+@@ -269,7 +281,9 @@ static int dxva2_mpeg2_end_frame(AVCodecContext *avctx)
+     if (!ret)
+         ff_mpeg_draw_horiz_band(s, 0, avctx->height);
+ 
++    ctx->last_slice_count = ctx_pic->slice_count;
+     av_freep(ctx_pic->slice);
++
+     return ret;
+ }
+ 
+-- 
+1.8.0.1
+
