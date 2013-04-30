@@ -1,3 +1,5 @@
+#!/bin/sh
+
 ################################################################################
 #      This file is part of OpenELEC - http://www.openelec.tv
 #      Copyright (C) 2009-2012 Stephan Raue (stephan@openelec.tv)
@@ -17,21 +19,8 @@
 #  the Free Software Foundation, 51 Franklin Street, Suite 500, Boston, MA 02110, USA.
 #  http://www.gnu.org/copyleft/gpl.html
 ################################################################################
-# Disklabel for System an Storage partition
-  DISKLABEL_SYSTEM="System"
-  DISKLABEL_STORAGE="Storage"
 
-# Defaultsize of system partition (Cylinder: 16=132MB, 31=255MB)
-  PARTSIZE_SYSTEM="31"
+. config/options $1
 
-# additional parameters to extlinux
-  EXTLINUX_PARAMETERS=""
-
-# enable BIOS update function
-  BIOS_UPDATE="no"
-
-# BIOS file to program
-  BIOS_FILE=""
-
-# location for BIOS backup (with filename)
-  BIOS_BACKUP=""
+mkdir -p $ADDON_BUILD/$PKG_ADDON_ID/bin
+  cp -P $PKG_BUILD/screen $ADDON_BUILD/$PKG_ADDON_ID/bin/screen
