@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="xbmc"
-PKG_VERSION="12.1.8"
+PKG_VERSION="12.2.0"
 if [ "$XBMC" = "master" ]; then
   PKG_VERSION="ea1250e"
 fi
