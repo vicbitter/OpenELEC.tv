@@ -21,7 +21,7 @@
 PKG_NAME="xbmc"
 PKG_VERSION="12.2.0"
 if [ "$XBMC" = "master" ]; then
-  PKG_VERSION="ea1250e"
+  PKG_VERSION="83b16d0"
 fi
 PKG_REV="1"
 PKG_ARCH="any"
