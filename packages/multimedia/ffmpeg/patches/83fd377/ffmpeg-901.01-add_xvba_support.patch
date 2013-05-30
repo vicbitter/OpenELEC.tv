@@ -31,7 +31,7 @@ index 2aff8e2..24f486d 100755
 @@ -145,6 +145,7 @@ Hardware accelerators:
    --enable-vaapi           enable VAAPI code
    --enable-vda             enable VDA code
-   --enable-vdpau           enable VDPAU code
+   --disable-vdpau          disable VDPAU code [autodetect]
 +  --disable-xvba           disable XVBA code
  
  Individual component options:
