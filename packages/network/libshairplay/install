@@ -24,5 +24,6 @@
 
 mkdir -p $INSTALL/usr/lib
   cp -P $PKG_BUILD/src/lib/.libs/*.so* $INSTALL/usr/lib
+
 mkdir -p $INSTALL/etc/shairplay
   cp -P $PKG_BUILD/airport.key $INSTALL/etc/shairplay

@@ -1,3 +1,8 @@
+3.0.9
+- update to CouchPotatoServe-5c0d8a7
+- update to Headphones-452cf15
+- remove CouchPotato (v1)
+
 3.0.8
 - update to CouchPotatoServe-f1dde5c
 - update to Headphones-ebbe908

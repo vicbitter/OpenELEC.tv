@@ -25,6 +25,7 @@ GIT_REPO="https://github.com/juhovh/shairplay.git"
 DEST_DIR="$PKG_NAME"
 
 echo "getting sources..."
+<<<<<<< HEAD
   if [ ! -d $DEST_DIR-latest ]; then
     git clone $GIT_REPO $DEST_DIR-latest
   fi
@@ -49,6 +50,23 @@ echo "copying sources..."
   rm -rf $PKG_NAME-$PKG_VERSION
   cp -R $DEST_DIR-latest $PKG_NAME-$PKG_VERSION
   echo "$GIT_REV" > $PKG_NAME-$PKG_VERSION/git.version
+=======
+  if [ ! -d $DEST_DIR.git ]; then
+    git clone $GIT_REPO $DEST_DIR.git
+  fi
+
+  cd $DEST_DIR.git
+    git pull
+
+    echo "getting version..."
+    PKG_VERSION=`git log -n1 --format=%h`
+    echo $GIT_REV
+  cd ..
+
+echo "copying sources..."
+  rm -rf $PKG_NAME-$PKG_VERSION
+  cp -R $DEST_DIR.git $PKG_NAME-$PKG_VERSION
+>>>>>>> d051af77783e8c7b15c8cf1a82b8db8f9c69f0c1
 
 echo "cleaning sources..."
   rm -rf $PKG_NAME-$PKG_VERSION/.git
@@ -58,6 +76,7 @@ echo "packing sources..."
 
 echo "remove temporary sourcedir..."
   rm -rf $PKG_NAME-$PKG_VERSION
+<<<<<<< HEAD
 
 echo "copying tar balls to sources..."
   mkdir -p ../../sources/$PKG_NAME/
@@ -84,3 +103,5 @@ echo "Update meta files and rename patches..."
 
 echo "Source tar balls generated for $PKG_NAME NEW PKG_VERSION=$PKG_VERSION and OLD PKG_VERSION=$GIT_OLD_REV successfully."
 
+=======
+>>>>>>> d051af77783e8c7b15c8cf1a82b8db8f9c69f0c1

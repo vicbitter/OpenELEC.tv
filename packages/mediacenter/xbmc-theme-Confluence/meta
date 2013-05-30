@@ -21,7 +21,13 @@
 PKG_NAME="xbmc-theme-Confluence"
 PKG_VERSION="12.2.0"
 if [ "$XBMC" = "master" ]; then
+<<<<<<< HEAD
   PKG_VERSION="ea1250e"
+=======
+  PKG_VERSION="31f386c"
+elif [ "$XBMC" = "xbmc-aml" ]; then
+  PKG_VERSION="aml-frodo-d9119f2"
+>>>>>>> d051af77783e8c7b15c8cf1a82b8db8f9c69f0c1
 fi
 PKG_REV="1"
 PKG_ARCH="any"
