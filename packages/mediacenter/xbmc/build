@@ -238,6 +238,7 @@ fi
 
 # xbmc fails to build with LTO optimization if build without GOLD support
   [ ! "$GOLD_SUPPORT" = "yes" ] && strip_lto
+#  strip_lto
 
 # dont build parallel
 # MAKEFLAGS=-j1

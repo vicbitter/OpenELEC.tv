@@ -21,7 +21,7 @@
 PKG_NAME="xbmc"
 PKG_VERSION="12.2.0"
 if [ "$XBMC" = "master" ]; then
-  PKG_VERSION="31f386c"
+  PKG_VERSION="e1aaba0"
 elif [ "$XBMC" = "xbmc-aml" ]; then
   PKG_VERSION="aml-frodo-d9119f2"
 fi
@@ -141,10 +141,6 @@ if [ "$AIRPLAY_SUPPORT" = yes ]; then
 fi
 
 if [ "$AIRTUNES_SUPPORT" = yes ]; then
-<<<<<<< HEAD
-  PKG_BUILD_DEPENDS="$PKG_BUILD_DEPENDS libshairport libshairplay"
-  PKG_DEPENDS="$PKG_DEPENDS libshairport libshairplay"
-=======
   if [ "$XBMC" = master ]; then
     PKG_BUILD_DEPENDS="$PKG_BUILD_DEPENDS libshairplay"
     PKG_DEPENDS="$PKG_DEPENDS libshairplay"
@@ -152,7 +148,6 @@ if [ "$AIRTUNES_SUPPORT" = yes ]; then
     PKG_BUILD_DEPENDS="$PKG_BUILD_DEPENDS libshairport"
     PKG_DEPENDS="$PKG_DEPENDS libshairport"
   fi
->>>>>>> d051af77783e8c7b15c8cf1a82b8db8f9c69f0c1
 fi
 
 if [ "$NFS_SUPPORT" = yes ]; then

@@ -1,0 +1,27 @@
+From 606455a9bec1d5061de7e618568768d3a4e7ec8c Mon Sep 17 00:00:00 2001
+From: ace20022 <ace20022@ymail.com>
+Date: Mon, 13 May 2013 13:35:50 +0200
+Subject: [PATCH] [bluray] Fix stream info/language retrieval for direct title
+ play.
+
+---
+ xbmc/cores/dvdplayer/DVDInputStreams/DVDInputStreamBluray.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/xbmc/cores/dvdplayer/DVDInputStreams/DVDInputStreamBluray.cpp b/xbmc/cores/dvdplayer/DVDInputStreams/DVDInputStreamBluray.cpp
+index 7352aa1..3ad4559 100644
+--- a/xbmc/cores/dvdplayer/DVDInputStreams/DVDInputStreamBluray.cpp
++++ b/xbmc/cores/dvdplayer/DVDInputStreams/DVDInputStreamBluray.cpp
+@@ -961,6 +961,9 @@ static bool find_stream(int pid, BLURAY_STREAM_INFO *info, int count, char* lang
+ 
+ void CDVDInputStreamBluray::GetStreamInfo(int pid, char* language)
+ {
++  if (!m_navmode && m_clip == (uint32_t)-1)
++    m_clip = 0;
++
+   if(!m_title || m_clip >= m_title->clip_count)
+     return;
+ 
+-- 
+1.8.1.6
+

@@ -1,0 +1,660 @@
+From 11aac6dd83ee915ee62d785c1814f66d5346752f Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 07:27:34 -0400
+Subject: [PATCH 01/13] DllAvCodec.h: remove mention of libavcore that is long
+ gone.
+
+---
+ lib/DllAvCodec.h | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/lib/DllAvCodec.h b/lib/DllAvCodec.h
+index 96bd68d..82b39b5 100644
+--- a/lib/DllAvCodec.h
++++ b/lib/DllAvCodec.h
+@@ -277,7 +277,6 @@ class DllAvCodec : public DllDynamic, DllAvCodecInterface
+ 
+   /* dependencies of libavcodec */
+   DllAvUtil m_dllAvUtil;
+-  // DllAvUtil loaded implicitely by m_dllAvCore
+ 
+ public:
+     static CCriticalSection m_critSection;
+-- 
+1.8.1.6
+
+
+From 533991dca5a69b5140aa5e8d96f11d9656fcc560 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 07:30:53 -0400
+Subject: [PATCH 02/13] configure: Do not check for libavcore files since it is
+ long gone and xbmc requires ffmpeg 1.0
+
+---
+ configure.in | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index cc5c08f..52dc24b 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1603,9 +1603,6 @@ fi
+ if test "$use_external_ffmpeg" = "yes"; then
+   FFMPEG_LIBNAMES="libavcodec libavfilter libavformat libavutil libpostproc libswscale"
+ 
+-  # libavcore is optional
+-  PKG_CHECK_EXISTS([libavcore], FFMPEG_LIBNAMES="$FFMPEG_LIBNAMES libavcore")
+-
+   # one of libswresample or libavresample is needed
+   PKG_CHECK_EXISTS([libswresample], FFMPEG_LIBNAMES="$FFMPEG_LIBNAMES libswresample",
+                    [PKG_CHECK_EXISTS([libavresample],
+@@ -1634,7 +1631,7 @@ if test "$use_external_ffmpeg" = "yes"; then
+   [AC_MSG_ERROR($missing_headers)])])
+ 
+   # optional
+-  AC_CHECK_HEADERS([libavcore/avcore.h libavcore/samplefmt.h libavutil/mem.h libavutil/samplefmt.h])
++  AC_CHECK_HEADERS([libavutil/mem.h libavutil/samplefmt.h])
+ 
+   # old FFmpeg have this in libavcodec/opt.h instead:
+   AC_CHECK_HEADERS([libavutil/opt.h])
+-- 
+1.8.1.6
+
+
+From d7c50d926045783a9ed237a324e5aa70b6ca2139 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 07:47:37 -0400
+Subject: [PATCH 03/13] Remove the checks for AVPacket definitions in
+ libavformat.
+
+It has been moved to libavcodec in 2009, libavcodec version 52, and xbmc requires ffmpeg 1.0, libavcodec version 54, so we can assume AVPacket is always defined in libavcodec.
+---
+ configure.in     | 7 -------
+ lib/DllAvCodec.h | 6 ------
+ 2 files changed, 13 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 52dc24b..519e9a6 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1614,13 +1614,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+                     [INCLUDES="$INCLUDES $FFMPEG_CFLAGS"; LIBS="$LIBS $FFMPEG_LIBS"],
+                     AC_MSG_ERROR($missing_library))
+ 
+-  # Determine whether AVPacket and relevant functions are defined in libavformat
+-  # or libavcodec
+-  AC_CHECK_LIB([avcodec], [av_free_packet],
+-  [AC_MSG_NOTICE(== AVPacket and relevant functions defined in libavcodec. ==)],
+-  [AC_MSG_NOTICE(== AVPacket and relevant functions defined in libavformat. ==)
+-   AC_DEFINE([AVPACKET_IN_AVFORMAT], [1], [Whether AVPacket is in libavformat.])])
+-
+   # in case the headers are in a custom directory
+   SAVE_CPPFLAGS="$CPPFLAGS"
+   CPPFLAGS="$CPPFLAGS $FFMPEG_CFLAGS"
+diff --git a/lib/DllAvCodec.h b/lib/DllAvCodec.h
+index 82b39b5..a8a1e93 100644
+--- a/lib/DllAvCodec.h
++++ b/lib/DllAvCodec.h
+@@ -48,15 +48,9 @@
+     #if (defined HAVE_LIBAVCODEC_OPT_H)
+       #include <libavcodec/opt.h>
+     #endif
+-    #if (defined AVPACKET_IN_AVFORMAT)
+-      #include <libavformat/avformat.h>
+-    #endif
+   #elif (defined HAVE_FFMPEG_AVCODEC_H)
+     #include <ffmpeg/avcodec.h>
+     #include <ffmpeg/opt.h>
+-    #if (defined AVPACKET_IN_AVFORMAT)
+-      #include <ffmpeg/avformat.h>
+-    #endif
+   #endif
+ #else
+   #include "libavcodec/avcodec.h"
+-- 
+1.8.1.6
+
+
+From 37c2da8f8cfbba653e3c60103a8816a29787919b Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 07:52:45 -0400
+Subject: [PATCH 04/13] Drop checks for libav*/opt.h.
+
+It has been moved to libavutil/opt.h in 2010, libavutil versin 50, and xbmc requires ffmpeg 1.0, libavutil version 51.
+---
+ configure.in     | 3 ---
+ lib/DllAvCodec.h | 4 ----
+ lib/DllAvUtil.h  | 8 +-------
+ 3 files changed, 1 insertion(+), 14 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 519e9a6..91f6b73 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1626,9 +1626,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   # optional
+   AC_CHECK_HEADERS([libavutil/mem.h libavutil/samplefmt.h])
+ 
+-  # old FFmpeg have this in libavcodec/opt.h instead:
+-  AC_CHECK_HEADERS([libavutil/opt.h])
+-
+   # new FFmpeg have math headers
+   AC_CHECK_HEADERS([libavutil/mathematics.h],,)
+ 
+diff --git a/lib/DllAvCodec.h b/lib/DllAvCodec.h
+index a8a1e93..09a5fdd 100644
+--- a/lib/DllAvCodec.h
++++ b/lib/DllAvCodec.h
+@@ -45,12 +45,8 @@
+ #if (defined USE_EXTERNAL_FFMPEG)
+   #if (defined HAVE_LIBAVCODEC_AVCODEC_H)
+     #include <libavcodec/avcodec.h>
+-    #if (defined HAVE_LIBAVCODEC_OPT_H)
+-      #include <libavcodec/opt.h>
+-    #endif
+   #elif (defined HAVE_FFMPEG_AVCODEC_H)
+     #include <ffmpeg/avcodec.h>
+-    #include <ffmpeg/opt.h>
+   #endif
+ #else
+   #include "libavcodec/avcodec.h"
+diff --git a/lib/DllAvUtil.h b/lib/DllAvUtil.h
+index 4d5bec9..04284d3 100644
+--- a/lib/DllAvUtil.h
++++ b/lib/DllAvUtil.h
+@@ -55,13 +55,7 @@
+     // for LIBAVCODEC_VERSION_INT:
+     #include <ffmpeg/avcodec.h>
+   #endif
+-  #if defined(HAVE_LIBAVUTIL_OPT_H)
+-    #include <libavutil/opt.h>
+-  #elif defined(HAVE_LIBAVCODEC_AVCODEC_H)
+-    #include <libavcodec/opt.h>
+-  #else
+-    #include <ffmpeg/opt.h>
+-  #endif
++  #include <libavutil/opt.h>
+   #if defined(HAVE_LIBAVUTIL_MEM_H)
+     #include <libavutil/mem.h>
+   #else
+-- 
+1.8.1.6
+
+
+From 7862cd0a421421cb40b252c31ec20017a9ac9e21 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 07:58:36 -0400
+Subject: [PATCH 05/13] Remove rgb2rgb.h checks.
+
+This header is unused in xbmc code.
+---
+ configure.in | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 91f6b73..591d6a1 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1629,10 +1629,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   # new FFmpeg have math headers
+   AC_CHECK_HEADERS([libavutil/mathematics.h],,)
+ 
+-  # We'll support the use of rgb2rgb.h if it exists.
+-  AC_CHECK_HEADERS([libswscale/rgb2rgb.h],,)
+-  AC_CHECK_HEADERS([ffmpeg/rgb2rgb.h],,)
+-
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+ 
+-- 
+1.8.1.6
+
+
+From 4e90f3896821002e6083bbac7d3beea8ec778250 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 08:02:52 -0400
+Subject: [PATCH 06/13] Remove the check for libavutil/mathematics.h and assume
+ it is always present.
+
+This header has existed since years and xbmc will not build with such an old ffmpeg version that does not have it.
+---
+ configure.in    | 3 ---
+ lib/DllAvUtil.h | 4 +---
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 591d6a1..69d4b9e 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1626,9 +1626,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   # optional
+   AC_CHECK_HEADERS([libavutil/mem.h libavutil/samplefmt.h])
+ 
+-  # new FFmpeg have math headers
+-  AC_CHECK_HEADERS([libavutil/mathematics.h],,)
+-
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+ 
+diff --git a/lib/DllAvUtil.h b/lib/DllAvUtil.h
+index 04284d3..aa9036d 100644
+--- a/lib/DllAvUtil.h
++++ b/lib/DllAvUtil.h
+@@ -61,9 +61,7 @@
+   #else
+     #include <ffmpeg/mem.h>
+   #endif
+-  #if (defined HAVE_LIBAVUTIL_MATHEMATICS_H)
+-    #include <libavutil/mathematics.h>
+-  #endif
++  #include <libavutil/mathematics.h>
+ #else
+   #include "libavutil/avutil.h"
+   //for av_get_default_channel_layout
+-- 
+1.8.1.6
+
+
+From 45c447a48cb29542c7467a87d4710cb839ad055e Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 08:05:17 -0400
+Subject: [PATCH 07/13] Remove the check for libavutil/mem.h and assume it is
+ always present.
+
+This header has existed since 2007 and xbmc will not build with such an old ffmpeg version that does not have it.
+---
+ configure.in    | 2 +-
+ lib/DllAvUtil.h | 6 +-----
+ 2 files changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 69d4b9e..f0a0fb6 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1624,7 +1624,7 @@ if test "$use_external_ffmpeg" = "yes"; then
+   [AC_MSG_ERROR($missing_headers)])])
+ 
+   # optional
+-  AC_CHECK_HEADERS([libavutil/mem.h libavutil/samplefmt.h])
++  AC_CHECK_HEADERS([libavutil/samplefmt.h])
+ 
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+diff --git a/lib/DllAvUtil.h b/lib/DllAvUtil.h
+index aa9036d..aaa5633 100644
+--- a/lib/DllAvUtil.h
++++ b/lib/DllAvUtil.h
+@@ -56,11 +56,7 @@
+     #include <ffmpeg/avcodec.h>
+   #endif
+   #include <libavutil/opt.h>
+-  #if defined(HAVE_LIBAVUTIL_MEM_H)
+-    #include <libavutil/mem.h>
+-  #else
+-    #include <ffmpeg/mem.h>
+-  #endif
++  #include <libavutil/mem.h>
+   #include <libavutil/mathematics.h>
+ #else
+   #include "libavutil/avutil.h"
+-- 
+1.8.1.6
+
+
+From a760994787d7316a25d85e1883ac494520108e33 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 08:07:35 -0400
+Subject: [PATCH 08/13] Remove the check for libavutil/samplefmt.h and assume
+ it is always present.
+
+This header has existed since libavcore got merged back into libavutil and xbmc will not build with such an old ffmpeg version that does not have it.
+---
+ configure.in    | 3 ---
+ lib/DllAvUtil.h | 6 ++----
+ 2 files changed, 2 insertions(+), 7 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index f0a0fb6..10fae0d 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1623,9 +1623,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   [AC_CHECK_HEADERS([ffmpeg/avcodec.h ffmpeg/avfilter.h ffmpeg/avformat.h ffmpeg/avutil.h postproc/postprocess.h ffmpeg/swscale.h],,
+   [AC_MSG_ERROR($missing_headers)])])
+ 
+-  # optional
+-  AC_CHECK_HEADERS([libavutil/samplefmt.h])
+-
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+ 
+diff --git a/lib/DllAvUtil.h b/lib/DllAvUtil.h
+index aaa5633..783ca2a 100644
+--- a/lib/DllAvUtil.h
++++ b/lib/DllAvUtil.h
+@@ -40,8 +40,6 @@
+     #include <libavutil/audioconvert.h>
+     #include <libavutil/crc.h>
+     #include <libavutil/fifo.h>
+-    // for enum AVSampleFormat
+-    #include <libavutil/samplefmt.h>
+     // for LIBAVCODEC_VERSION_INT:
+     #include <libavcodec/avcodec.h>
+   #elif (defined HAVE_FFMPEG_AVUTIL_H)
+@@ -50,11 +48,11 @@
+     #include <ffmpeg/audioconvert.h>
+     #include <ffmpeg/crc.h>
+     #include <ffmpeg/fifo.h>
+-    // for enum AVSampleFormat
+-    #include <ffmpeg/samplefmt.h>
+     // for LIBAVCODEC_VERSION_INT:
+     #include <ffmpeg/avcodec.h>
+   #endif
++  // for enum AVSampleFormat
++  #include <libavutil/samplefmt.h>
+   #include <libavutil/opt.h>
+   #include <libavutil/mem.h>
+   #include <libavutil/mathematics.h>
+-- 
+1.8.1.6
+
+
+From af362f9c6bcf15c12f5dec6d0c84c362d1d4d538 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 13:50:02 -0400
+Subject: [PATCH 09/13] Drop support for old ffmpeg header layout.
+
+xbmc requires a ffmpeg version that has the new layout.
+---
+ configure.in      |  3 +--
+ lib/DllAvCodec.h  |  6 +-----
+ lib/DllAvFilter.h | 12 +++---------
+ lib/DllAvFormat.h |  6 +-----
+ lib/DllAvUtil.h   | 24 +++++++-----------------
+ lib/DllPostProc.h | 12 ++----------
+ lib/DllSwScale.h  |  6 +-----
+ 7 files changed, 16 insertions(+), 53 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 10fae0d..2d65a55 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1620,8 +1620,7 @@ if test "$use_external_ffmpeg" = "yes"; then
+ 
+   # Possible places the ffmpeg headers may be
+   AC_CHECK_HEADERS([libavcodec/avcodec.h libavfilter/avfilter.h libavformat/avformat.h libavutil/avutil.h libpostproc/postprocess.h libswscale/swscale.h],,
+-  [AC_CHECK_HEADERS([ffmpeg/avcodec.h ffmpeg/avfilter.h ffmpeg/avformat.h ffmpeg/avutil.h postproc/postprocess.h ffmpeg/swscale.h],,
+-  [AC_MSG_ERROR($missing_headers)])])
++  [AC_MSG_ERROR($missing_headers)])
+ 
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+diff --git a/lib/DllAvCodec.h b/lib/DllAvCodec.h
+index 09a5fdd..cf52a14 100644
+--- a/lib/DllAvCodec.h
++++ b/lib/DllAvCodec.h
+@@ -43,11 +43,7 @@
+ #endif
+ 
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBAVCODEC_AVCODEC_H)
+-    #include <libavcodec/avcodec.h>
+-  #elif (defined HAVE_FFMPEG_AVCODEC_H)
+-    #include <ffmpeg/avcodec.h>
+-  #endif
++  #include <libavcodec/avcodec.h>
+ #else
+   #include "libavcodec/avcodec.h"
+ #endif
+diff --git a/lib/DllAvFilter.h b/lib/DllAvFilter.h
+index d44b918..11e9234 100644
+--- a/lib/DllAvFilter.h
++++ b/lib/DllAvFilter.h
+@@ -42,15 +42,9 @@
+ #endif
+ 
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBAVFILTER_AVFILTER_H)
+-    #include <libavfilter/avfiltergraph.h>
+-    #include <libavfilter/buffersink.h>
+-    #include <libavfilter/avcodec.h>
+-  #elif (defined HAVE_FFMPEG_AVFILTER_H)
+-    #include <ffmpeg/avfiltergraph.h>
+-    #include <ffmpeg/buffersink.h>
+-    #include <ffmpeg/avcodec.h>
+-  #endif
++  #include <libavfilter/avfiltergraph.h>
++  #include <libavfilter/buffersink.h>
++  #include <libavfilter/avcodec.h>
+ #else
+   #include "libavfilter/avfiltergraph.h"
+   #include "libavfilter/buffersink.h"
+diff --git a/lib/DllAvFormat.h b/lib/DllAvFormat.h
+index 791dc01..c3029db 100644
+--- a/lib/DllAvFormat.h
++++ b/lib/DllAvFormat.h
+@@ -37,11 +37,7 @@
+ #pragma warning(disable:4244)
+ #endif
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBAVFORMAT_AVFORMAT_H)
+-    #include <libavformat/avformat.h>
+-  #else
+-    #include <ffmpeg/avformat.h>
+-  #endif
++  #include <libavformat/avformat.h>
+   /* xbmc_read_frame_flush() is defined for us in lib/xbmc-dll-symbols/DllAvFormat.c */
+   void xbmc_read_frame_flush(AVFormatContext *s);
+ #else
+diff --git a/lib/DllAvUtil.h b/lib/DllAvUtil.h
+index 783ca2a..27f0b28 100644
+--- a/lib/DllAvUtil.h
++++ b/lib/DllAvUtil.h
+@@ -34,23 +34,13 @@
+ 
+ extern "C" {
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBAVUTIL_AVUTIL_H)
+-    #include <libavutil/avutil.h>
+-    // for av_get_default_channel_layout
+-    #include <libavutil/audioconvert.h>
+-    #include <libavutil/crc.h>
+-    #include <libavutil/fifo.h>
+-    // for LIBAVCODEC_VERSION_INT:
+-    #include <libavcodec/avcodec.h>
+-  #elif (defined HAVE_FFMPEG_AVUTIL_H)
+-    #include <ffmpeg/avutil.h>
+-    // for av_get_default_channel_layout
+-    #include <ffmpeg/audioconvert.h>
+-    #include <ffmpeg/crc.h>
+-    #include <ffmpeg/fifo.h>
+-    // for LIBAVCODEC_VERSION_INT:
+-    #include <ffmpeg/avcodec.h>
+-  #endif
++  #include <libavutil/avutil.h>
++  // for av_get_default_channel_layout
++  #include <libavutil/audioconvert.h>
++  #include <libavutil/crc.h>
++  #include <libavutil/fifo.h>
++  // for LIBAVCODEC_VERSION_INT:
++  #include <libavcodec/avcodec.h>
+   // for enum AVSampleFormat
+   #include <libavutil/samplefmt.h>
+   #include <libavutil/opt.h>
+diff --git a/lib/DllPostProc.h b/lib/DllPostProc.h
+index 04115c5..0797eb5 100644
+--- a/lib/DllPostProc.h
++++ b/lib/DllPostProc.h
+@@ -39,16 +39,8 @@
+ #endif
+   
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBAVUTIL_AVUTIL_H)
+-    #include <libavutil/avutil.h>
+-  #elif (defined HAVE_FFMPEG_AVUTIL_H)
+-    #include <ffmpeg/avutil.h>
+-  #endif
+-  #if (defined HAVE_LIBPOSTPROC_POSTPROCESS_H)
+-    #include <libpostproc/postprocess.h>
+-  #elif (defined HAVE_POSTPROC_POSTPROCESS_H)
+-    #include <postproc/postprocess.h>
+-  #endif
++  #include <libavutil/avutil.h>
++  #include <libpostproc/postprocess.h>
+ #else
+   #include "libavutil/avutil.h"
+   #include "libpostproc/postprocess.h"
+diff --git a/lib/DllSwScale.h b/lib/DllSwScale.h
+index fd2ee57..7e98bef 100644
+--- a/lib/DllSwScale.h
++++ b/lib/DllSwScale.h
+@@ -45,11 +45,7 @@
+ #endif
+ 
+ #if (defined USE_EXTERNAL_FFMPEG)
+-  #if (defined HAVE_LIBSWSCALE_SWSCALE_H)
+-    #include <libswscale/swscale.h>
+-  #elif (defined HAVE_FFMPEG_SWSCALE_H)
+-    #include <ffmpeg/swscale.h>
+-  #endif
++  #include <libswscale/swscale.h>
+ #else
+   #include "libswscale/swscale.h"
+ #endif
+-- 
+1.8.1.6
+
+
+From 916a6b6af3438f504deeda3f59b59893b564258c Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 15:18:51 -0400
+Subject: [PATCH 10/13] Drop PIX_FMT_VDPAU_MPEG4 checks and assume it is always
+ present. It is the case for all ffmpeg versions xbmc can build against.
+
+---
+ configure.in                                   | 11 -----------
+ xbmc/cores/dvdplayer/DVDCodecs/Video/VDPAU.cpp |  3 +--
+ 2 files changed, 1 insertion(+), 13 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 2d65a55..7cf7a02 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1652,21 +1652,10 @@ if test "$use_external_ffmpeg" = "yes"; then
+       AC_MSG_RESULT($ffmpeg_vdpau_not_supported)
+     fi])
+ 
+-  # Check for 'PIX_FMT_VDPAU_MPEG4' from libavutil
+-  if test "x$use_vdpau" != "xno"; then
+-    AC_LANG_PUSH([C++])
+-    AC_LINK_IFELSE(
+-      [AC_LANG_SOURCE([ #include <libavutil/pixfmt.h>
+-        int main() { PixelFormat format = PIX_FMT_VDPAU_MPEG4; }])],
+-      [AC_DEFINE([PIX_FMT_VDPAU_MPEG4_IN_AVUTIL], [1],
+-      [Whether AVUtil defines PIX_FMT_VDPAU_MPEG4.])],)
+-    AC_LANG_POP([C++])
+-  fi
+   CPPFLAGS="$SAVE_CPPFLAGS"
+ else
+   AC_MSG_NOTICE($external_ffmpeg_disabled)
+   USE_EXTERNAL_FFMPEG=0
+-  AC_DEFINE([PIX_FMT_VDPAU_MPEG4_IN_AVUTIL], [1], [Whether AVUtil defines PIX_FMT_VDPAU_MPEG4.])
+ fi
+ 
+ echo "Checking for SWIG installation"
+-- 
+1.8.1.6
+
+
+From e2fc333209ba11bdf396ed795516ac199e0dd7e4 Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 15:19:57 -0400
+Subject: [PATCH 11/13] configure: remove a no longer valid comment
+
+---
+ configure.in | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/configure.in b/configure.in
+index 7cf7a02..2382826 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1618,7 +1618,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   SAVE_CPPFLAGS="$CPPFLAGS"
+   CPPFLAGS="$CPPFLAGS $FFMPEG_CFLAGS"
+ 
+-  # Possible places the ffmpeg headers may be
+   AC_CHECK_HEADERS([libavcodec/avcodec.h libavfilter/avfilter.h libavformat/avformat.h libavutil/avutil.h libpostproc/postprocess.h libswscale/swscale.h],,
+   [AC_MSG_ERROR($missing_headers)])
+ 
+-- 
+1.8.1.6
+
+
+From e63ea5abc36fc0fe35649c70d2498ee0161bf4cd Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 15:25:21 -0400
+Subject: [PATCH 12/13] Restore code parts from [573b4bc18] to improve libav
+ compatibility.
+
+---
+ xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
+index 6ce6e8b..4129abb 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecFFmpeg.cpp
+@@ -559,7 +559,11 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(DVDVideoPicture* pDvdVideoPicture)
+   /* use variable in the frame */
+   AVRational pixel_aspect = m_pCodecContext->sample_aspect_ratio;
+   if (m_pBufferRef)
++#if defined(LIBAVFILTER_FROM_FFMPEG)
+     pixel_aspect = m_pBufferRef->video->sample_aspect_ratio;
++#else
++    pixel_aspect = m_pBufferRef->video->pixel_aspect;
++#endif
+ 
+   if (pixel_aspect.num == 0)
+     aspect_ratio = 0;
+-- 
+1.8.1.6
+
+
+From 90b09c5ef537e0cde2dace1a055758fe58f54aec Mon Sep 17 00:00:00 2001
+From: Alexis Ballier <aballier@gentoo.org>
+Date: Fri, 17 May 2013 15:26:38 -0400
+Subject: [PATCH 13/13] configure: Drop checks for sample_aspect_ratio. They
+ are useless because they are done via #ifery now.
+
+---
+ configure.in | 14 --------------
+ 1 file changed, 14 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 2382826..f9684ed 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1624,20 +1624,6 @@ if test "$use_external_ffmpeg" = "yes"; then
+   # Check for libswresample or libavresample headers.
+   AC_CHECK_HEADERS([libswresample/swresample.h libavresample/avresample.h])
+ 
+-  # Check if AVFilterBufferRefVideoProps AVRational member is named
+-  # 'pixel_aspect' or 'sample_aspect_ratio'.
+-  AC_CHECK_MEMBER([AVFilterBufferRefVideoProps.sample_aspect_ratio],
+-    [AC_DEFINE([HAVE_AVFILTERBUFFERREFVIDEOPROPS_SAMPLE_ASPECT_RATIO],
+-    [1],
+-    [Define to 1 if AVFilterBufferRefVideoProps has member sample_aspect_ratio.])],
+-      [AC_CHECK_MEMBER([AVFilterBufferRefVideoProps.sample_aspect_ratio],
+-      [AC_DEFINE([HAVE_AVFILTERBUFFERREFVIDEOPROPS_SAMPLE_ASPECT_RATIO],
+-      [1],
+-      [Define to 1 if AVFilterBufferRefVideoProps has member sample_aspect_ratio.])],
+-      ,
+-      [[#include <ffmpeg/avfilter.h>]])],
+-    [[#include <libavfilter/avfilter.h>]])
+-
+   AC_MSG_NOTICE($external_ffmpeg_enabled)
+   USE_EXTERNAL_FFMPEG=1
+   AC_DEFINE([USE_EXTERNAL_FFMPEG], [1], [Whether to use external FFmpeg libraries.])
+-- 
+1.8.1.6
+

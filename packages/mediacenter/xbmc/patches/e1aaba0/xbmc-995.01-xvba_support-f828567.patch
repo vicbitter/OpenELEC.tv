@@ -13335,7 +13335,6 @@ Subject: [PATCH 050/119] X11: fix multi-head setups
  language/English/strings.po         |   4 +-
  system/settings/settings.xml        |  10 ++
  xbmc/rendering/gl/RenderSystemGL.h  |   1 +
- xbmc/settings/DisplaySettings.cpp   |  42 +++++-
  xbmc/settings/DisplaySettings.h     |   2 +
  xbmc/settings/Settings.cpp          |   6 +
  xbmc/windowing/WinEventsX11.cpp     |   7 +
@@ -13378,10 +13377,10 @@ index 18ce36d..97523b1 100644
          <setting id="videoscreen.screen" type="integer" label="240" help="36351">
            <level>0</level>
            <default>0</default>
-@@ -1866,6 +1875,7 @@
-           <dependencies>
+@@ -1886,6 +1886,7 @@
              <dependency type="enable" setting="videoscreen.screen" operator="!is">-1</dependency> <!-- DM_WINDOWED -->
              <dependency type="update" setting="videoscreen.screen" />
+             <dependency type="update" setting="videoscreen.screenmode" />
 +            <dependency type="update" setting="videoscreen.monitor" />
            </dependencies>
            <control type="spinner" format="string" delayed="true" />
@@ -13398,99 +13397,6 @@ index 5c7a288..f3fd4fb 100644
  
    virtual void SetViewPort(CRect& viewPort);
    virtual void GetViewPort(CRect& viewPort);
-diff --git a/xbmc/settings/DisplaySettings.cpp b/xbmc/settings/DisplaySettings.cpp
-index e6ea24a..6da868a 100644
---- a/xbmc/settings/DisplaySettings.cpp
-+++ b/xbmc/settings/DisplaySettings.cpp
-@@ -198,7 +198,8 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-   const std::string &settingId = setting->GetId();
-   if (settingId == "videoscreen.resolution" ||
-       settingId == "videoscreen.screen" ||
--      settingId == "videoscreen.screenmode")
-+      settingId == "videoscreen.screenmode" ||
-+      settingId == "videoscreen.monitor")
-   {
-     // check if this is the revert call for a failed OnSettingChanging
-     // in which case we don't want to ask the user again
-@@ -212,6 +213,11 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-         newRes = GetResolutionForScreen();
-       else if (settingId == "videoscreen.screenmode")
-         newRes = GetResolutionFromString(((CSettingString*)setting)->GetValue());
-+      else if (settingId == "videoscreen.monitor")
-+      {
-+        g_Windowing.UpdateResolutions();
-+        newRes = GetResolutionForScreen();
-+      }
- 
-       // We need to change and save videoscreen.screenmode which will
-       // trigger another call to this OnSettingChanging() which should not
-@@ -220,8 +226,10 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-       bool save = settingId != "videoscreen.screenmode";
-       if (save)
-         m_ignoreSettingChanging.insert(make_pair("videoscreen.screenmode", true));
-+
-+      bool outputChanged = !g_Windowing.IsCurrentOutput(CSettings::Get().GetString("videoscreen.monitor"));
-       SetCurrentResolution(newRes, save);
--      g_graphicsContext.SetVideoResolution(newRes);
-+      g_graphicsContext.SetVideoResolution(newRes, outputChanged);
- 
-       // check if the old or the new resolution was/is windowed
-       // in which case we don't show any prompt to the user
-@@ -245,7 +253,7 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-           m_ignoreSettingChanging.erase(make_pair(settingId, false));
-       }
- 
--      if (settingId == "videoscreen.screen")
-+      if (settingId == "videoscreen.screen" || settingId == "videoscreen.monitor")
-         m_ignoreSettingChanging.insert(make_pair("videoscreen.resolution", true));
-     }
-     else
-@@ -577,6 +585,10 @@ void CDisplaySettings::SettingOptionsScreensFiller(const CSetting *setting, std:
-   if (g_advancedSettings.m_canWindowed)
-     list.push_back(make_pair(g_localizeStrings.Get(242), DM_WINDOWED));
- 
-+#if defined(HAS_GLX)
-+  list.push_back(make_pair(g_localizeStrings.Get(244), 0));
-+#else
-+
-   for (int idx = 0; idx < g_Windowing.GetNumScreens(); idx++)
-   {
-     int screen = CDisplaySettings::Get().GetResolutionInfo(RES_DESKTOP + idx).iScreen;
-@@ -592,6 +604,7 @@ void CDisplaySettings::SettingOptionsScreensFiller(const CSetting *setting, std:
-     RESOLUTION_INFO resInfo = CDisplaySettings::Get().GetResolutionInfo(res);
-     current = resInfo.iScreen;
-   }
-+#endif
- }
- 
- void CDisplaySettings::SettingOptionsVerticalSyncsFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current)
-@@ -603,3 +616,26 @@ void CDisplaySettings::SettingOptionsVerticalSyncsFiller(const CSetting *setting
-   list.push_back(make_pair(g_localizeStrings.Get(13107), VSYNC_VIDEO));
-   list.push_back(make_pair(g_localizeStrings.Get(13108), VSYNC_ALWAYS));
- }
-+
-+void CDisplaySettings::SettingOptionsMonitorsFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current)
-+{
-+  std::vector<CStdString> monitors;
-+  g_Windowing.GetConnectedOutputs(&monitors);
-+  for (unsigned int i=0; i<monitors.size(); ++i)
-+  {
-+    if(CDisplaySettings::Get().GetResolutionInfo(RES_DESKTOP).strOutput.Equals(monitors[i]))
-+    {
-+      current = monitors[i];
-+    }
-+    list.push_back(make_pair(monitors[i], monitors[i]));
-+  }
-+}
-+
-+void CDisplaySettings::ClearCustomResolutions()
-+{
-+  if (m_resolutions.size() > RES_CUSTOM)
-+  {
-+    std::vector<RESOLUTION_INFO>::iterator firstCustom = m_resolutions.begin()+RES_CUSTOM;
-+    m_resolutions.erase(firstCustom, m_resolutions.end());
-+  }
-+}
 diff --git a/xbmc/settings/DisplaySettings.h b/xbmc/settings/DisplaySettings.h
 index 96d0cb0..2795b9e 100644
 --- a/xbmc/settings/DisplaySettings.h
@@ -20901,51 +20807,6 @@ index f479c27..7345c06 100644
 1.8.1.6
 
 
-From 8cb06db3fc7f3971217de43704167cdfe7b558c5 Mon Sep 17 00:00:00 2001
-From: unknown <fernetmenta@online.de>
-Date: Fri, 18 Jan 2013 15:16:38 +0100
-Subject: [PATCH 087/119] multi-screen: fix compilation on windows
-
----
- xbmc/settings/DisplaySettings.cpp | 7 ++++++-
- 1 file changed, 6 insertions(+), 1 deletion(-)
-
-diff --git a/xbmc/settings/DisplaySettings.cpp b/xbmc/settings/DisplaySettings.cpp
-index 6da868a..05ee52f 100644
---- a/xbmc/settings/DisplaySettings.cpp
-+++ b/xbmc/settings/DisplaySettings.cpp
-@@ -227,7 +227,10 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-       if (save)
-         m_ignoreSettingChanging.insert(make_pair("videoscreen.screenmode", true));
- 
--      bool outputChanged = !g_Windowing.IsCurrentOutput(CSettings::Get().GetString("videoscreen.monitor"));
-+      bool outputChanged = false;
-+#if defined(HAS_GLX)
-+      outputChanged = !g_Windowing.IsCurrentOutput(CSettings::Get().GetString("videoscreen.monitor"));
-+#endif
-       SetCurrentResolution(newRes, save);
-       g_graphicsContext.SetVideoResolution(newRes, outputChanged);
- 
-@@ -619,6 +622,7 @@ void CDisplaySettings::SettingOptionsVerticalSyncsFiller(const CSetting *setting
- 
- void CDisplaySettings::SettingOptionsMonitorsFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current)
- {
-+#if defined(HAS_GLX)
-   std::vector<CStdString> monitors;
-   g_Windowing.GetConnectedOutputs(&monitors);
-   for (unsigned int i=0; i<monitors.size(); ++i)
-@@ -629,6 +633,7 @@ void CDisplaySettings::SettingOptionsMonitorsFiller(const CSetting *setting, std
-     }
-     list.push_back(make_pair(monitors[i], monitors[i]));
-   }
-+#endif
- }
- 
- void CDisplaySettings::ClearCustomResolutions()
--- 
-1.8.1.6
-
-
 From 09edf3169593b426d249a893e9ba87735fe0cd96 Mon Sep 17 00:00:00 2001
 From: xbmc <fernetmenta@online.de>
 Date: Fri, 14 Dec 2012 14:19:15 +0100
@@ -22961,7 +22822,6 @@ Subject: [PATCH 113/119] X11: add setting to switch off unused monitor
 ---
  language/English/strings.po         |  9 +++++++--
  system/settings/settings.xml        |  6 ++++++
- xbmc/settings/DisplaySettings.cpp   |  4 ++++
  xbmc/windowing/X11/WinSystemX11.cpp | 17 +++++++++++++++++
  4 files changed, 34 insertions(+), 2 deletions(-)
 
@@ -23016,21 +22876,6 @@ index 3d95d9c..8170afe 100644
            <level>1</level>
            <default>false</default>
            <dependencies>
-diff --git a/xbmc/settings/DisplaySettings.cpp b/xbmc/settings/DisplaySettings.cpp
-index 05ee52f..28a4abe 100644
---- a/xbmc/settings/DisplaySettings.cpp
-+++ b/xbmc/settings/DisplaySettings.cpp
-@@ -262,6 +262,10 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
-     else
-       m_ignoreSettingChanging.erase(make_pair(settingId, true));
-   }
-+  else if (settingId == "videoscreen.monitorsingle")
-+  {
-+    g_Windowing.UpdateResolutions();
-+  }
- 
-   return true;
- }
 diff --git a/xbmc/windowing/X11/WinSystemX11.cpp b/xbmc/windowing/X11/WinSystemX11.cpp
 index 61f4115..5d08a9b 100644
 --- a/xbmc/windowing/X11/WinSystemX11.cpp
@@ -23369,6 +23214,130 @@ index 1db9363..54d7aea 100644
    {
      CLog::Log(LOGERROR, "Surface too large, decoder skipped: surfaceWidth %u, surfaceHeight %u",
                          surfaceWidth, surfaceHeight);
+diff --git a/xbmc/settings/DisplaySettings.cpp b/xbmc/settings/DisplaySettings.cpp
+index 6c304ff..cafd855 100644
+--- a/xbmc/settings/DisplaySettings.cpp
++++ b/xbmc/settings/DisplaySettings.cpp
+@@ -198,13 +198,19 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
+ 
+   const std::string &settingId = setting->GetId();
+   if (settingId == "videoscreen.resolution" ||
+-      settingId == "videoscreen.screen")
++      settingId == "videoscreen.screen" ||
++      settingId == "videoscreen.monitor")
+   {
+     RESOLUTION newRes = RES_DESKTOP;
+     if (settingId == "videoscreen.resolution")
+       newRes = (RESOLUTION)((CSettingInt*)setting)->GetValue();
+     else if (settingId == "videoscreen.screen")
+       newRes = GetResolutionForScreen();
++    else if (settingId == "videoscreen.monitor")
++      {
++        g_Windowing.UpdateResolutions();
++        newRes = GetResolutionForScreen();
++      }
+ 
+     string screenmode = GetStringFromResolution(newRes);
+     CSettings::Get().SetString("videoscreen.screenmode", screenmode);
+@@ -214,8 +220,12 @@ bool CDisplaySettings::OnSettingChanging(const CSetting *setting)
+     RESOLUTION oldRes = GetCurrentResolution();
+     RESOLUTION newRes = GetResolutionFromString(((CSettingString*)setting)->GetValue());
+ 
++    bool outputChanged = false;
++#if defined(HAS_GLX)
++    outputChanged = !g_Windowing.IsCurrentOutput(CSettings::Get().GetString("videoscreen.monitor"));
++#endif
+     SetCurrentResolution(newRes, false);
+-    g_graphicsContext.SetVideoResolution(newRes);
++    g_graphicsContext.SetVideoResolution(newRes, outputChanged);
+ 
+     // check if the old or the new resolution was/is windowed
+     // in which case we don't show any prompt to the user
+@@ -264,6 +274,10 @@ void CDisplaySettings::SetCurrentResolution(RESOLUTION resolution, bool save /*
+     string mode = GetStringFromResolution(resolution);
+     CSettings::Get().SetString("videoscreen.screenmode", mode.c_str());
+   }
++  else if (settingId == "videoscreen.monitorsingle")
++  {
++    g_Windowing.UpdateResolutions();
++  }
+ 
+   m_currentResolution = resolution;
+ 
+@@ -571,6 +585,10 @@ void CDisplaySettings::SettingOptionsScreensFiller(const CSetting *setting, std:
+   if (g_advancedSettings.m_canWindowed)
+     list.push_back(make_pair(g_localizeStrings.Get(242), DM_WINDOWED));
+ 
++#if defined(HAS_GLX)
++  list.push_back(make_pair(g_localizeStrings.Get(244), 0));
++#else
++
+   for (int idx = 0; idx < g_Windowing.GetNumScreens(); idx++)
+   {
+     int screen = CDisplaySettings::Get().GetResolutionInfo(RES_DESKTOP + idx).iScreen;
+@@ -585,6 +603,7 @@ void CDisplaySettings::SettingOptionsScreensFiller(const CSetting *setting, std:
+     RESOLUTION_INFO resInfo = CDisplaySettings::Get().GetResolutionInfo(res);
+     current = resInfo.iScreen;
+   }
++#endif
+ }
+ 
+ void CDisplaySettings::SettingOptionsVerticalSyncsFiller(const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current)
+@@ -596,3 +615,28 @@ void CDisplaySettings::SettingOptionsVerticalSyncsFiller(const CSetting *setting
+   list.push_back(make_pair(g_localizeStrings.Get(13107), VSYNC_VIDEO));
+   list.push_back(make_pair(g_localizeStrings.Get(13108), VSYNC_ALWAYS));
+ }
++
++void CDisplaySettings::SettingOptionsMonitorsFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current)
++{
++#if defined(HAS_GLX)
++  std::vector<CStdString> monitors;
++  g_Windowing.GetConnectedOutputs(&monitors);
++  for (unsigned int i=0; i<monitors.size(); ++i)
++  {
++    if(CDisplaySettings::Get().GetResolutionInfo(RES_DESKTOP).strOutput.Equals(monitors[i]))
++    {
++      current = monitors[i];
++    }
++    list.push_back(make_pair(monitors[i], monitors[i]));
++  }
++#endif
++}
++
++void CDisplaySettings::ClearCustomResolutions()
++{
++  if (m_resolutions.size() > RES_CUSTOM)
++  {
++    std::vector<RESOLUTION_INFO>::iterator firstCustom = m_resolutions.begin()+RES_CUSTOM;
++    m_resolutions.erase(firstCustom, m_resolutions.end());
++  }
++}
+diff --git a/xbmc/settings/DisplaySettings.cpp b/xbmc/settings/DisplaySettings.cpp
+index cafd855..4c7c757 100644
+--- a/xbmc/settings/DisplaySettings.cpp
++++ b/xbmc/settings/DisplaySettings.cpp
+@@ -263,6 +263,10 @@ bool CDisplaySettings::OnSettingUpdate(CSetting* &setting, const char *oldSettin
+     if (screenmode.size() == 20)
+       return screenmodeSetting->SetValue(screenmode + "p");
+   }
++  else if (settingId == "videoscreen.monitorsingle")
++  {
++    g_Windowing.UpdateResolutions();
++  }
+ 
+   return false;
+ }
+@@ -274,10 +278,6 @@ void CDisplaySettings::SetCurrentResolution(RESOLUTION resolution, bool save /*
+     string mode = GetStringFromResolution(resolution);
+     CSettings::Get().SetString("videoscreen.screenmode", mode.c_str());
+   }
+-  else if (settingId == "videoscreen.monitorsingle")
+-  {
+-    g_Windowing.UpdateResolutions();
+-  }
+ 
+   m_currentResolution = resolution;
+ 
 -- 
 1.8.1.6
 
